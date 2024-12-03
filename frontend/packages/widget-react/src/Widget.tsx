@@ -197,7 +197,7 @@ export const Widget = forwardRef<WidgetInstance, WidgetProps>(({ container, trig
                       </div>
                     </ScrollArea>
                     <div className="text-muted-foreground text-xs p-8 pt-0">
-                      Powered by <a className="underline" href="https://github.com/pingcap/autoflow" target="_blank">github.com/pingcap/autoflow</a>.
+                      Powered by <a href="https://openai.com" target="_blank">OpenAI</a>, <a href="https://cohere.com" target="_blank">Cohere</a>, <a href="https://tidbcloud.com" target="_blank">TiDB Serverless</a>, <a href="https://llamaindex.ai" target="_blank">LlamaIndex</a> and <a href="https://dspy.ai" target="_blank">DSPy</a>
                     </div>
                   </AutoScroll>
                 </DialogPrimitive.Content>
