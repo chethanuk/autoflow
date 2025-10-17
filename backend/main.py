@@ -127,11 +127,19 @@ def cli():
 @cli.command()
 @click.option("--host", default="127.0.0.1", help="Host, default=127.0.0.1")
 @click.option("--port", default=3000, help="Port, default=3000")
-def runserver(host, port):
+@click.option("--workers", default=4)
+def runserver(host, port, workers):
     warnings.warn(
         "This command will start the server in development mode, do not use it in production."
     )
-    uvicorn.run("main:app", host=host, port=port, reload=True, log_level="debug")
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=True,
+        log_level="debug",
+        workers=workers,
+    )
 
 
 @cli.command()
@@ -147,7 +155,7 @@ def runserver(host, port):
 @click.option(
     "--tidb-ai-chat-engine",
     default="default",
-    help=f"TiDB AI chat engine, default=default",
+    help="TiDB AI chat engine, default=default",
 )
 def runeval(dataset, llm_provider, run_name, tidb_ai_chat_engine):
     from app.evaluation.evals import Evaluation
@@ -163,8 +171,9 @@ def runeval(dataset, llm_provider, run_name, tidb_ai_chat_engine):
 
 @cli.command()
 @click.option(
-    "--csv", default="autoflow_dataset.csv",
-    help="Dataset CSV file name that contains two columns `query` and `reference`, default='autoflow_dataset.csv'"
+    "--csv",
+    default="autoflow_dataset.csv",
+    help="Dataset CSV file name that contains two columns `query` and `reference`, default='autoflow_dataset.csv'",
 )
 @click.option(
     "--llm-provider",
@@ -175,7 +184,7 @@ def runeval(dataset, llm_provider, run_name, tidb_ai_chat_engine):
 @click.option(
     "--tidb-ai-chat-engine",
     default="default",
-    help=f"TiDB AI chat engine, default=default",
+    help="TiDB AI chat engine, default=default",
 )
 @click.option("--run-size", default=30, help="Run size, default=30")
 def runeval_dataset(csv, llm_provider, run_name, tidb_ai_chat_engine, run_size):
@@ -202,7 +211,11 @@ def generate_answer_by_tidb_ai(query: str):
         tidb_ai_chat_engine="default",
     )
 
-    print(evaluation.generate_answer_by_tidb_ai(messages=[{"role": "user", "content": query}]))
+    print(
+        evaluation.generate_answer_by_tidb_ai(
+            messages=[{"role": "user", "content": query}]
+        )
+    )
 
 
 if __name__ == "__main__":

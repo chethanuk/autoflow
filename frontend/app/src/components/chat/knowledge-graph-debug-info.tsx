@@ -14,11 +14,11 @@ export function KnowledgeGraphDebugInfo ({ group }: { group: ChatMessageGroup })
   const { engine_options } = useChatInfo(useCurrentChatController()) ?? {};
   const auth = useAuth();
   const ongoing = useChatMessageStreamState(group.assistant);
-  const kbId = engine_options?.knowledge_base?.linked_knowledge_base?.id;
-  const canEdit = !!auth.me?.is_superuser && kbId != null;
+  const kbLinked = engine_options?.knowledge_base?.linked_knowledge_bases;
+  const canEdit = !!auth.me?.is_superuser && kbLinked;
 
   const shouldFetch = (!ongoing || ongoing.finished || couldFetchKnowledgeGraphDebugInfo(ongoing));
-  const { data: span, isLoading, mutate } = useSWR(
+  const { data: span, isLoading, mutate, error } = useSWR(
     shouldFetch && `api.chats.get-message-subgraph?id=${group.user.id}`,
     () => getChatMessageSubgraph(group.user.id),
     {
@@ -29,10 +29,10 @@ export function KnowledgeGraphDebugInfo ({ group }: { group: ChatMessageGroup })
   );
 
   useEffect(() => {
-    if (shouldFetch && !isLoading && !span) {
+    if (shouldFetch && !error && !isLoading && !span) {
       mutate(undefined, true);
     }
-  }, [span, isLoading, shouldFetch]);
+  }, [span, isLoading, error, shouldFetch]);
 
   const network = useNetwork(span);
 
@@ -42,13 +42,51 @@ export function KnowledgeGraphDebugInfo ({ group }: { group: ChatMessageGroup })
       loading={!shouldFetch || isLoading}
       loadingTitle={shouldFetch ? 'Loading knowledge graph...' : 'Waiting knowledge graph request...'}
       network={network}
-      Details={() => canEdit
-        ? (
-          <Link href={`/knowledge-bases/${kbId}/knowledge-graph-explorer?query=${encodeURIComponent(`message-subgraph:${group.user.id}`)}`} className="absolute top-2 right-2 text-xs underline">
+      Details={
+        ({ target, network }) => {
+          if (!canEdit) return null;
+
+          if (!kbLinked) return null;
+
+          if (kbLinked.length === 1) {
+            return (
+              <Link href={`/knowledge-bases/${kbLinked[0].id}/knowledge-graph-explorer?query=${encodeURIComponent(`message-subgraph:${group.user.id}`)}`} className="absolute top-2 right-2 text-xs underline">
+                <PencilIcon className="w-3 h-3 mr-1 inline-block" />
+                Edit graph
+              </Link>
+            );
+          }
+
+          const placeholder = <span className="text-muted-foreground absolute top-2 right-2 text-xs underline cursor-not-allowed">
             <PencilIcon className="w-3 h-3 mr-1 inline-block" />
             Edit graph
-          </Link>
-        ) : null}
+          </span>;
+
+          if (!target) return placeholder;
+
+          if (target.type === 'node') {
+            const node = network.node(target.id);
+            if (!node?.knowledge_base_id) return placeholder;
+            return (
+              <Link href={`/knowledge-bases/${node.knowledge_base_id}/knowledge-graph-explorer?query=${encodeURIComponent(`message-subgraph:${group.user.id}`)}`} className="absolute top-2 right-2 text-xs underline">
+                <PencilIcon className="w-3 h-3 mr-1 inline-block" />
+                Edit graph
+              </Link>
+            );
+          } else if (target.type === 'link') {
+            const link = network.node(target.id);
+            if (!link?.knowledge_base_id) return placeholder;
+            return (
+              <Link href={`/knowledge-bases/${link.knowledge_base_id}/knowledge-graph-explorer?query=${encodeURIComponent(`message-subgraph:${group.user.id}`)}`} className="absolute top-2 right-2 text-xs underline">
+                <PencilIcon className="w-3 h-3 mr-1 inline-block" />
+                Edit graph
+              </Link>
+            );
+          }
+
+          return placeholder;
+        }
+      }
     />
   );
 }

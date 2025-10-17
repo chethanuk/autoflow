@@ -2,62 +2,69 @@
 
 import { login } from '@/api/auth';
 import { FormInput } from '@/components/form/control-widget';
-import { FormFieldBasicLayout } from '@/components/form/field-layout';
-import { useReplace } from '@/components/nextjs/app-router-hooks';
-// import { supportedProviders } from '@/app/(main)/(admin)/settings/authentication/providers';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { formFieldLayout } from '@/components/form/field-layout';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Form } from '@/components/ui/form';
+import { Form, formDomEventHandlers } from '@/components/ui/form.beta';
 import { getErrorMessage } from '@/lib/errors';
+import { useForm } from '@tanstack/react-form';
 import { Loader2Icon } from 'lucide-react';
-// import { fetcher } from '@/lib/fetch';
-// import { signIn } from 'next-auth/react';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition } from 'react';
 
-export function Signin ({ noRedirect = false, onLoggedIn, callbackUrl }: { noRedirect?: boolean, onLoggedIn?: () => void, callbackUrl?: string }) {
-  const [transitioning, replace] = useReplace(true);
+const field = formFieldLayout<{
+  username: string
+  password: string
+}>();
+
+export function Signin ({ noRedirect = false, callbackUrl }: { noRedirect?: boolean, callbackUrl?: string }) {
+  const [transitioning, startTransition] = useTransition();
+  const router = useRouter();
   const [error, setError] = useState<string>();
   const form = useForm<{ username: string; password: string }>({
     defaultValues: {
       username: '',
       password: '',
     },
-  });
-
-  const handleSubmit = form.handleSubmit(async (data) => {
-    setError(undefined);
-    try {
-      await login(data);
-      onLoggedIn?.();
-      if (!noRedirect) {
-        replace(refineCallbackUrl(callbackUrl));
+    onSubmit: async ({ value }) => {
+      setError(undefined);
+      try {
+        await login(value);
+        startTransition(() => {
+          if (!noRedirect) {
+            router.replace(refineCallbackUrl(callbackUrl));
+          }
+          router.refresh();
+        });
+      } catch (error) {
+        setError(getErrorMessage(error));
       }
-    } catch (error) {
-      setError(getErrorMessage(error));
-    }
+    },
   });
 
-  const loading = form.formState.isSubmitting || transitioning;
+  const loading = form.state.isSubmitting || transitioning;
 
   return (
     <>
       {error && (
         <Alert variant="destructive">
+          <AlertTitle>
+            Failed to login
+          </AlertTitle>
           <AlertDescription>
             Could not login with provided credentials.
           </AlertDescription>
         </Alert>
       )}
-      <Form {...form}>
-        <form className="space-y-2" onSubmit={handleSubmit}>
-          <FormFieldBasicLayout name="username" label="Username">
+      <Form form={form} disabled={transitioning}>
+        <form className="space-y-2" {...formDomEventHandlers(form, transitioning)}>
+          <field.Basic name="username" label="Username">
             <FormInput placeholder="x@example.com" />
-          </FormFieldBasicLayout>
-          <FormFieldBasicLayout name="password" label="Password">
+          </field.Basic>
+          <field.Basic name="password" label="Password">
             <FormInput type="password" />
-          </FormFieldBasicLayout>
-          <Button className="!mt-4 w-full" disabled={loading}>
+          </field.Basic>
+          <Button className="!mt-4 w-full" type="submit" disabled={loading}>
             {loading && <Loader2Icon className="w-4 h-4 mr-2 animate-spin repeat-infinite" />}
             {transitioning ? 'Redirecting...' : loading ? 'Logging in...' : 'Login'}
           </Button>

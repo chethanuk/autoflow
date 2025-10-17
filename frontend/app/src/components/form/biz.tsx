@@ -1,10 +1,15 @@
+import type { ChatEngine } from '@/api/chat-engines';
 import { type EmbeddingModel } from '@/api/embedding-models';
+import type { EvaluationDataset } from '@/api/evaluations';
 import { type KnowledgeBaseSummary } from '@/api/knowledge-base';
 import { type LLM } from '@/api/llms';
 import type { ProviderOption } from '@/api/providers';
 import { type Reranker } from '@/api/rerankers';
+import { useAllChatEngines } from '@/components/chat-engine/hooks';
+import { DateFormat } from '@/components/date-format';
 import { CreateEmbeddingModelForm } from '@/components/embedding-models/CreateEmbeddingModelForm';
 import { useAllEmbeddingModels } from '@/components/embedding-models/hooks';
+import { useAllEvaluationDatasets } from '@/components/evaluations/hooks';
 import { FormCombobox, type FormComboboxConfig, type FormComboboxProps } from '@/components/form/control-widget';
 import { useAllKnowledgeBases } from '@/components/knowledge-base/hooks';
 import { CreateLLMForm } from '@/components/llm/CreateLLMForm';
@@ -13,16 +18,18 @@ import { ManagedDialog } from '@/components/managed-dialog';
 import { ManagedPanelContext } from '@/components/managed-panel';
 import { CreateRerankerForm } from '@/components/reranker/CreateRerankerForm';
 import { useAllRerankers } from '@/components/reranker/hooks';
+import { Badge } from '@/components/ui/badge';
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertTriangleIcon, DotIcon, PlusIcon } from 'lucide-react';
-import { forwardRef } from 'react';
+import { forwardRef, type Ref } from 'react';
 
-export const EmbeddingModelSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
+export const EmbeddingModelSelect = forwardRef<any, Omit<FormComboboxProps<EmbeddingModel, 'id'>, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
   const { data: embeddingModels, isLoading, mutate, error } = useAllEmbeddingModels();
 
   return (
     <FormCombobox
       {...props}
+      ref={ref}
       placeholder="Default Embedding Model"
       config={{
         options: embeddingModels ?? [],
@@ -70,19 +77,20 @@ export const EmbeddingModelSelect = forwardRef<any, Omit<FormComboboxProps, 'con
           </ManagedDialog>
         ),
         key: 'id',
-      } satisfies FormComboboxConfig<EmbeddingModel>}
+      } satisfies FormComboboxConfig<EmbeddingModel, 'id'>}
     />
   );
 });
 
 EmbeddingModelSelect.displayName = 'EmbeddingModelSelect';
 
-export const LLMSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
+export const LLMSelect = forwardRef<any, Omit<FormComboboxProps<LLM, 'id'>, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
   const { data: llms, isLoading, mutate, error } = useAllLlms();
 
   return (
     <FormCombobox
       {...props}
+      ref={ref}
       placeholder="Default LLM"
       config={{
         options: llms ?? [],
@@ -130,19 +138,20 @@ export const LLMSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> & { r
         ),
         optionKeywords: option => [option.name, option.provider, option.model],
         key: 'id',
-      } satisfies FormComboboxConfig<LLM>}
+      } satisfies FormComboboxConfig<LLM, 'id'>}
     />
   );
 });
 
 LLMSelect.displayName = 'LLMSelect';
 
-export const RerankerSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
+export const RerankerSelect = forwardRef<any, Omit<FormComboboxProps<Reranker, 'id'>, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
   const { data: rerankers, mutate, isLoading, error } = useAllRerankers();
 
   return (
     <FormCombobox
       {...props}
+      ref={ref}
       placeholder="Default Reranker Model"
       config={{
         options: rerankers ?? [],
@@ -190,22 +199,21 @@ export const RerankerSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> 
           </ManagedDialog>
         ),
         key: 'id',
-      } satisfies FormComboboxConfig<Reranker>}
+      } satisfies FormComboboxConfig<Reranker, 'id'>}
     />
   );
 });
 
 RerankerSelect.displayName = 'RerankerSelect';
 
-export interface ProviderSelectProps<Provider extends ProviderOption = ProviderOption> extends Omit<FormComboboxProps, 'config'> {
+export function ProviderSelect<Provider extends ProviderOption> ({
+  options, isLoading, error, ref, ...props
+}: {
   options: ProviderOption[] | undefined;
   isLoading: boolean;
   error: unknown;
-}
-
-export const ProviderSelect = forwardRef<any, ProviderSelectProps>(({
-  options, isLoading, error, ...props
-}, ref) => {
+  ref?: Ref<any>
+}) {
   return (
     <FormCombobox
       ref={ref}
@@ -223,16 +231,16 @@ export const ProviderSelect = forwardRef<any, ProviderSelectProps>(({
         itemClassName: 'space-y-1',
         renderValue: option => option.provider_display_name ?? option.provider,
         key: 'provider',
-      } satisfies FormComboboxConfig<ProviderOption>}
+      } satisfies FormComboboxConfig<ProviderOption, 'provider'>}
       contentWidth="anchor"
       {...props}
     />
   );
-});
+}
 
 ProviderSelect.displayName = 'ProviderSelect';
 
-export const KBSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
+export const KBSelect = forwardRef<any, Omit<FormComboboxProps<KnowledgeBaseSummary, 'id'>, 'config'> & { reverse?: boolean }>(({ reverse = true, ...props }, ref) => {
   const { data: kbs, isLoading, error } = useAllKnowledgeBases();
 
   return (
@@ -242,7 +250,7 @@ export const KBSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> & { re
       placeholder="Select Knowledge Base"
       config={{
         options: kbs ?? [],
-        optionKeywords: option => [String(option.id), option.name, option.description],
+        optionKeywords: option => [String(option.id), option.name, option.description ?? ''],
         loading: isLoading,
         error,
         renderValue: option => (
@@ -281,9 +289,72 @@ export const KBSelect = forwardRef<any, Omit<FormComboboxProps, 'config'> & { re
           </div>
         ),
         key: 'id',
-      } satisfies FormComboboxConfig<KnowledgeBaseSummary>}
+      } satisfies FormComboboxConfig<KnowledgeBaseSummary, 'id'>}
     />
   );
 });
 
 KBSelect.displayName = 'KBSelect';
+
+export function EvaluationDatasetSelect ({ reverse = true, ref, ...props }: Omit<FormComboboxProps<EvaluationDataset, 'id'>, 'config'> & { reverse?: boolean, ref?: Ref<any> }) {
+
+  const { data: evaluationDatasets, isLoading, error } = useAllEvaluationDatasets();
+
+  return (
+    <FormCombobox
+      {...props}
+      ref={ref}
+      placeholder="Select Evaluation Dataset"
+      config={{
+        options: evaluationDatasets ?? [],
+        optionKeywords: option => [option.name],
+        loading: isLoading,
+        error,
+        renderValue: option => (<span>{option.name}</span>),
+        renderOption: option => (
+          <div>
+            <div><strong>{option.name}</strong></div>
+            <div className="text-xs text-muted-foreground">
+              Updated At: <DateFormat date={option.updated_at} />
+            </div>
+          </div>
+        ),
+        key: 'id',
+      } satisfies FormComboboxConfig<EvaluationDataset, 'id'>}
+    />
+  );
+}
+
+export function ChatEngineSelect ({ reverse = true, ref, ...props }: Omit<FormComboboxProps<ChatEngine, 'name'>, 'config'> & { reverse?: boolean, ref?: Ref<any> }) {
+  const { data: chatEngines, isLoading, error } = useAllChatEngines();
+
+  return (
+    <FormCombobox
+      {...props}
+      ref={ref}
+      placeholder="Default Chat Engine"
+      config={{
+        options: chatEngines ?? [],
+        optionKeywords: option => [option.name],
+        loading: isLoading,
+        error,
+        renderValue: option => (
+          <>
+            <strong>{option.name}</strong>
+            {!!option.engine_options.external_engine_config?.stream_chat_api_url && <Badge className="ml-2 font-normal" variant="secondary">External Chat Engine</Badge>}
+            {!!option.engine_options.knowledge_graph?.enabled && <Badge className="ml-2 font-normal" variant="secondary">Knowledge Graph</Badge>}
+          </>
+        ),
+        renderOption: option => (
+          <div>
+            <strong>{option.name}</strong>
+            {option.is_default && <Badge className="ml-2">Default</Badge>}
+            {!!option.engine_options.external_engine_config?.stream_chat_api_url && <Badge className="ml-2 font-normal" variant="secondary">External Chat Engine</Badge>}
+            {!!option.engine_options.knowledge_graph?.enabled && <Badge className="ml-2 font-normal" variant="secondary">Knowledge Graph</Badge>}
+          </div>
+        ),
+        key: 'name',
+      } satisfies FormComboboxConfig<ChatEngine, 'name'>}
+    />
+  );
+}

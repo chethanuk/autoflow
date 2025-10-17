@@ -1,18 +1,21 @@
 'use client';
 
 import { type ChatEngine, type ChatEngineKnowledgeGraphOptions, type ChatEngineLLMOptions, type ChatEngineOptions, updateChatEngine } from '@/api/chat-engines';
-import { KBSelect, LLMSelect, RerankerSelect } from '@/components/form/biz';
+import { KBListSelect } from '@/components/chat-engine/kb-list-select';
+import { LLMSelect, RerankerSelect } from '@/components/form/biz';
 import { FormCheckbox, FormInput, FormSwitch } from '@/components/form/control-widget';
-import { FormFieldBasicLayout, FormFieldContainedLayout, FormFieldInlineLayout } from '@/components/form/field-layout';
+import { formFieldLayout } from '@/components/form/field-layout';
 import { PromptInput } from '@/components/form/widgets/PromptInput';
 import { SecondaryNavigatorItem, SecondaryNavigatorLayout, SecondaryNavigatorList, SecondaryNavigatorMain } from '@/components/secondary-navigator-list';
-import { fieldAccessor, GeneralSettingsField, type GeneralSettingsFieldAccessor, GeneralSettingsForm, shallowPick } from '@/components/settings-form';
+import { fieldAccessor, GeneralSettingsField as GeneralSettingsField, type GeneralSettingsFieldAccessor, GeneralSettingsForm, shallowPick } from '@/components/settings-form';
 import type { KeyOfType } from '@/lib/typing-utils';
 import { capitalCase } from 'change-case-all';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useTransition } from 'react';
 import { z } from 'zod';
+
+const field = formFieldLayout<{ value: any | any[] }>();
 
 export function UpdateChatEngineForm ({ chatEngine, defaultChatEngineOptions }: { chatEngine: ChatEngine, defaultChatEngineOptions: ChatEngineOptions }) {
   const [transitioning, startTransition] = useTransition();
@@ -35,10 +38,10 @@ export function UpdateChatEngineForm ({ chatEngine, defaultChatEngineOptions }: 
         }
       }}
     >
-      <SecondaryNavigatorLayout defaultValue="Info">
+      <SecondaryNavigatorLayout defaultValue="General">
         <SecondaryNavigatorList>
-          <SecondaryNavigatorItem value="Info">
-            Info
+          <SecondaryNavigatorItem value="General">
+            General
           </SecondaryNavigatorItem>
           <SecondaryNavigatorItem value="Retrieval">
             Retrieval
@@ -46,159 +49,174 @@ export function UpdateChatEngineForm ({ chatEngine, defaultChatEngineOptions }: 
           <SecondaryNavigatorItem value="Generation">
             Generation
           </SecondaryNavigatorItem>
-          <SecondaryNavigatorItem value="Features">
-            Features
+          <SecondaryNavigatorItem value="Experimental">
+            Experimental
           </SecondaryNavigatorItem>
+          <div className="mt-auto pt-2 text-xs text-gray-500 space-y-1">
+            <div className="flex justify-between px-3">
+              <span>Created:</span>
+              <span>{format(chatEngine.created_at, 'yyyy-MM-dd HH:mm:ss')}</span>
+            </div>
+            <div className="flex justify-between px-3">
+              <span>Updated:</span>
+              <span>{format(chatEngine.updated_at, 'yyyy-MM-dd HH:mm:ss')}</span>
+            </div>
+          </div>
         </SecondaryNavigatorList>
-        <Section title="Info">
-          <GeneralSettingsField readonly accessor={idAccessor} schema={neverSchema}>
-            <FormFieldBasicLayout required name="value" label="ID">
-              <FormInput />
-            </FormFieldBasicLayout>
-          </GeneralSettingsField>
+        <Section title="General">
           <GeneralSettingsField accessor={nameAccessor} schema={nameSchema}>
-            <FormFieldBasicLayout name="value" label="Name">
-              <FormInput />
-            </FormFieldBasicLayout>
+            <field.Basic name="value" label="Name">
+              <FormInput placeholder="Enter chat engine name" />
+            </field.Basic>
           </GeneralSettingsField>
           <GeneralSettingsField accessor={isDefaultAccessor} schema={isDefaultSchema}>
-            <FormFieldContainedLayout unimportant name="value" label="Is Default" fallbackValue={chatEngine.is_default} description="/// Description TBD">
+            <field.Contained unimportant name="value" label="Is Default" fallbackValue={chatEngine.is_default} description="Set this chat engine as the default engine for new conversations">
               <FormSwitch />
-            </FormFieldContainedLayout>
-          </GeneralSettingsField>
-          <GeneralSettingsField readonly accessor={createdAccessor} schema={neverSchema}>
-            <FormFieldBasicLayout name="value" label="Created At">
-              <FormInput />
-            </FormFieldBasicLayout>
-          </GeneralSettingsField>
-          <GeneralSettingsField readonly accessor={updatedAccessor} schema={neverSchema}>
-            <FormFieldBasicLayout name="value" label="Updated At">
-              <FormInput />
-            </FormFieldBasicLayout>
+            </field.Contained>
           </GeneralSettingsField>
           <SubSection title="Models">
             <GeneralSettingsField accessor={llmIdAccessor} schema={idSchema}>
-              <FormFieldBasicLayout name="value" label="LLM">
+              <field.Basic name="value" label="LLM">
                 <LLMSelect />
-              </FormFieldBasicLayout>
+              </field.Basic>
             </GeneralSettingsField>
             <GeneralSettingsField accessor={fastLlmIdAccessor} schema={idSchema}>
-              <FormFieldBasicLayout name="value" label="Fast LLM">
+              <field.Basic name="value" label="Fast LLM">
                 <LLMSelect />
-              </FormFieldBasicLayout>
-            </GeneralSettingsField>
-          </SubSection>
-          <SubSection title="External Engine Config">
-            <GeneralSettingsField accessor={externalEngineAccessor} schema={externalEngineSchema}>
-              <FormFieldBasicLayout name="value" label="External Chat Engine API URL (StackVM)" fallbackValue={defaultChatEngineOptions.external_engine_config?.stream_chat_api_url ?? ''}>
-                <FormInput />
-              </FormFieldBasicLayout>
-            </GeneralSettingsField>
-            <GeneralSettingsField accessor={llmAccessor.generate_goal_prompt} schema={llmSchema}>
-              <FormFieldBasicLayout name="value" label="Generate Goal Prompt" description="/// TBD" fallbackValue={defaultChatEngineOptions.llm?.generate_goal_prompt}>
-                <PromptInput />
-              </FormFieldBasicLayout>
+              </field.Basic>
             </GeneralSettingsField>
           </SubSection>
         </Section>
 
         <Section title="Retrieval">
-
-          <GeneralSettingsField accessor={kbAccessor} schema={kbSchema}>
-            <FormFieldBasicLayout required name="value" label="Knowledge Base">
-              <KBSelect />
-            </FormFieldBasicLayout>
-          </GeneralSettingsField>
-          <GeneralSettingsField accessor={rerankerIdAccessor} schema={idSchema}>
-            <FormFieldBasicLayout name="value" label="Reranker">
-              <RerankerSelect />
-            </FormFieldBasicLayout>
-          </GeneralSettingsField>
+          <SubSection title="Knowledge Sources">
+            <GeneralSettingsField accessor={kbAccessor} schema={kbSchema}>
+              <field.Basic required name="value" label="Knowledge Bases">
+                <KBListSelect />
+              </field.Basic>
+            </GeneralSettingsField>
+            <GeneralSettingsField accessor={hideSourcesAccessor} schema={hideSourcesSchema}>
+              <field.Inline name="value" label="Hide Sources" fallbackValue={defaultChatEngineOptions.hide_sources} description="Hide knowledge sources in chat responses">
+                <FormCheckbox />
+              </field.Inline>
+            </GeneralSettingsField>
+          </SubSection>
+          <SubSection title="Semantic Search">
+            <GeneralSettingsField accessor={rerankerIdAccessor} schema={idSchema}>
+              <field.Basic name="value" label="Reranker">
+                <RerankerSelect />
+              </field.Basic>
+            </GeneralSettingsField>
+          </SubSection>
           <SubSection title="Knowledge Graph">
             <GeneralSettingsField accessor={kgEnabledAccessor} schema={kgEnabledSchema}>
-              <FormFieldContainedLayout name="value" label="Enable Knowledge Graph" fallbackValue={defaultChatEngineOptions.knowledge_graph?.enabled} description="/// Description TBD">
+              <field.Contained name="value" label="Enable Knowledge Graph" fallbackValue={defaultChatEngineOptions.knowledge_graph?.enabled} description="Enable knowledge graph to enrich context information">
                 <FormSwitch />
-              </FormFieldContainedLayout>
+              </field.Contained>
             </GeneralSettingsField>
             <GeneralSettingsField accessor={kgDepthAccessor} schema={kgDepthSchema}>
-              <FormFieldBasicLayout name="value" label="Depth" fallbackValue={defaultChatEngineOptions.knowledge_graph?.depth}>
+              <field.Basic name="value" label="Depth" fallbackValue={defaultChatEngineOptions.knowledge_graph?.depth} description="Set the maximum traversal depth for knowledge graph search (higher values allow finding more distant relationships)">
                 <FormInput type="number" min={1} />
-              </FormFieldBasicLayout>
+              </field.Basic>
             </GeneralSettingsField>
             <GeneralSettingsField accessor={kgIncludeMetaAccessor} schema={kgIncludeMetaSchema}>
-              <FormFieldInlineLayout name="value" label="Include Meta" fallbackValue={defaultChatEngineOptions.knowledge_graph?.include_meta} description="/// Description TBD">
+              <field.Inline name="value" label="Include Metadata" fallbackValue={defaultChatEngineOptions.knowledge_graph?.include_meta} description="Include metadata information in knowledge graph nodes to provide additional context">
                 <FormCheckbox />
-              </FormFieldInlineLayout>
+              </field.Inline>
             </GeneralSettingsField>
             <GeneralSettingsField accessor={kgWithDegreeAccessor} schema={kgWithDegreeSchema}>
-              <FormFieldInlineLayout name="value" label="With Degree" fallbackValue={defaultChatEngineOptions.knowledge_graph?.with_degree} description="/// Description TBD">
+              <field.Inline name="value" label="With Degree" fallbackValue={defaultChatEngineOptions.knowledge_graph?.with_degree} description="Include entity in-degree and out-degree information in knowledge graph for weight calculation and ranking">
                 <FormCheckbox />
-              </FormFieldInlineLayout>
+              </field.Inline>
             </GeneralSettingsField>
             <GeneralSettingsField accessor={kgUsingIntentSearchAccessor} schema={kgUsingIntentSearchSchema}>
-              <FormFieldInlineLayout name="value" label="Using intent search" fallbackValue={defaultChatEngineOptions.knowledge_graph?.using_intent_search} description="/// Description TBD">
+              <field.Inline name="value" label="Using Intent Search" fallbackValue={defaultChatEngineOptions.knowledge_graph?.using_intent_search} description="Enable intelligent search that breaks down user question into sub-questions for more comprehensive search results">
                 <FormCheckbox />
-              </FormFieldInlineLayout>
+              </field.Inline>
             </GeneralSettingsField>
             {(['intent_graph_knowledge', 'normal_graph_knowledge'] as const).map(type => (
               <GeneralSettingsField key={type} accessor={llmAccessor[type]} schema={llmSchema}>
-                <FormFieldBasicLayout name="value" label={capitalCase(type)} description="/// TBD" fallbackValue={defaultChatEngineOptions.llm?.[type]}>
+                <field.Basic name="value" label={capitalCase(type)} description="Template for processing and extracting knowledge from graph-based traversal methods" fallbackValue={defaultChatEngineOptions.llm?.[type]}>
                   <PromptInput />
-                </FormFieldBasicLayout>
+                </field.Basic>
               </GeneralSettingsField>
             ))}
           </SubSection>
         </Section>
 
         <Section title="Generation">
-          {(['condense_question_prompt', 'condense_answer_prompt', 'text_qa_prompt', 'refine_prompt'] as const).map(type => (
-            <GeneralSettingsField key={type} accessor={llmAccessor[type]} schema={llmSchema}>
-              <FormFieldBasicLayout name="value" label={capitalCase(type)} description="/// TBD" fallbackValue={defaultChatEngineOptions.llm?.[type]}>
-                <PromptInput />
-              </FormFieldBasicLayout>
-            </GeneralSettingsField>
-          ))}
-        </Section>
-
-        <Section title="Features">
-          <GeneralSettingsField accessor={hideSourcesAccessor} schema={hideSourcesSchema}>
-            <FormFieldInlineLayout name="value" label="Hide Sources" fallbackValue={defaultChatEngineOptions.hide_sources} description="/// Description TBD">
-              <FormCheckbox />
-            </FormFieldInlineLayout>
-          </GeneralSettingsField>
           <SubSection title="Clarify Question">
             <GeneralSettingsField accessor={clarifyAccessor} schema={clarifyAccessorSchema}>
-              <FormFieldContainedLayout unimportant name="value" label="Clarify Question" fallbackValue={defaultChatEngineOptions.clarify_question} description="/// Description TBD">
+              <field.Contained unimportant name="value" label="Clarify Question" fallbackValue={defaultChatEngineOptions.clarify_question} description="Allow ChatBot to check if user input is ambiguous and ask clarifying questions">
                 <FormSwitch />
-              </FormFieldContainedLayout>
+              </field.Contained>
             </GeneralSettingsField>
             <GeneralSettingsField accessor={llmAccessor.clarifying_question_prompt} schema={llmSchema}>
-              <FormFieldBasicLayout name="value" label="Clarifying Question Prompt" description="/// TBD" fallbackValue={defaultChatEngineOptions.llm?.clarifying_question_prompt}>
+              <field.Basic name="value" label="" description="Prompt template for generating clarifying questions when the user's input needs more context or specificity" fallbackValue={defaultChatEngineOptions.llm?.clarifying_question_prompt}>
                 <PromptInput />
-              </FormFieldBasicLayout>
+              </field.Basic>
+            </GeneralSettingsField>
+          </SubSection>
+          <SubSection title="Rewrite Question">
+            <GeneralSettingsField accessor={llmAccessor.condense_question_prompt} schema={llmSchema}>
+              <field.Basic name="value" label="" description={promptDescriptions.condense_question_prompt} fallbackValue={defaultChatEngineOptions.llm?.condense_question_prompt}>
+                <PromptInput />
+              </field.Basic>
+            </GeneralSettingsField>
+          </SubSection>
+          <SubSection title="Answer Question">
+            <GeneralSettingsField accessor={llmAccessor.text_qa_prompt} schema={llmSchema}>
+              <field.Basic name="value" label="" description={promptDescriptions.text_qa_prompt} fallbackValue={defaultChatEngineOptions.llm?.text_qa_prompt}>
+                <PromptInput />
+              </field.Basic>
+            </GeneralSettingsField>
+          </SubSection>
+          <SubSection title="Further Questions">
+            <GeneralSettingsField accessor={optionAccessor('further_questions')} schema={z.boolean().nullable().optional()}>
+              <field.Contained
+                unimportant
+                name="value"
+                label="Show Further Questions"
+                fallbackValue={defaultChatEngineOptions.further_questions}
+                description="Show suggested follow-up questions after each answer"
+              >
+                <FormSwitch />
+              </field.Contained>
+            </GeneralSettingsField>
+            <GeneralSettingsField accessor={llmAccessor.further_questions_prompt} schema={llmSchema}>
+              <field.Basic name="value" label="" description="Template for generating follow-up questions to continue the conversation" fallbackValue={defaultChatEngineOptions.llm?.further_questions_prompt}>
+                <PromptInput />
+              </field.Basic>
+            </GeneralSettingsField>
+          </SubSection>
+        </Section>
+
+        <Section title="Experimental">
+          <SubSection title="External Engine">
+            <GeneralSettingsField accessor={externalEngineAccessor} schema={externalEngineSchema}>
+              <field.Basic name="value" label="External Chat Engine API URL (StackVM)" fallbackValue={defaultChatEngineOptions.external_engine_config?.stream_chat_api_url ?? ''}>
+                <FormInput />
+              </field.Basic>
+            </GeneralSettingsField>
+            <GeneralSettingsField accessor={llmAccessor.generate_goal_prompt} schema={llmSchema}>
+              <field.Basic name="value" label="Generate Goal Prompt" description="Template used to generate conversation goals and objectives based on user input" fallbackValue={defaultChatEngineOptions.llm?.generate_goal_prompt}>
+                <PromptInput />
+              </field.Basic>
             </GeneralSettingsField>
           </SubSection>
           <SubSection title="Post Verification">
             <GeneralSettingsField accessor={postVerificationUrlAccessor} schema={postVerificationUrlSchema}>
-              <FormFieldBasicLayout name="value" label="Post Verifycation Service URL" fallbackValue={defaultChatEngineOptions.post_verification_url ?? ''}>
+              <field.Basic name="value" label="Post Verifycation Service URL" fallbackValue={defaultChatEngineOptions.post_verification_url ?? ''}>
                 <FormInput />
-              </FormFieldBasicLayout>
+              </field.Basic>
             </GeneralSettingsField>
             <GeneralSettingsField accessor={postVerificationTokenAccessor} schema={postVerificationTokenSchema}>
-              <FormFieldBasicLayout name="value" label="Post Verifycation Service Token" fallbackValue={defaultChatEngineOptions.post_verification_token ?? ''}>
+              <field.Basic name="value" label="Post Verifycation Service Token" fallbackValue={defaultChatEngineOptions.post_verification_token ?? ''}>
                 <FormInput />
-              </FormFieldBasicLayout>
-            </GeneralSettingsField>
-          </SubSection>
-          <SubSection title="Further Recommended Questions">
-            <GeneralSettingsField accessor={llmAccessor.further_questions_prompt} schema={llmSchema}>
-              <FormFieldBasicLayout name="value" label="Further Questions Prompt" description="/// TBD" fallbackValue={defaultChatEngineOptions.llm?.further_questions_prompt}>
-                <PromptInput />
-              </FormFieldBasicLayout>
+              </field.Basic>
             </GeneralSettingsField>
           </SubSection>
         </Section>
-
       </SecondaryNavigatorLayout>
     </GeneralSettingsForm>
   );
@@ -299,24 +317,26 @@ const llmIdAccessor = getIdAccessor('llm_id');
 const fastLlmIdAccessor = getIdAccessor('fast_llm_id');
 const rerankerIdAccessor = getIdAccessor('reranker_id');
 
-const kbAccessor: GeneralSettingsFieldAccessor<ChatEngine, number | null> = {
+const kbAccessor: GeneralSettingsFieldAccessor<ChatEngine, number[] | null> = {
   path: ['engine_options'],
   get (data) {
-    return data.engine_options.knowledge_base?.linked_knowledge_base?.id ?? null;
+    console.log(data.engine_options.knowledge_base?.linked_knowledge_bases?.map(kb => kb.id) ?? null);
+    return data.engine_options.knowledge_base?.linked_knowledge_bases?.map(kb => kb.id) ?? null;
   },
-  set (data, id) {
+  set (data, value) {
     return {
       ...data,
       engine_options: {
         ...data.engine_options,
         knowledge_base: {
-          linked_knowledge_base: { id },
+          linked_knowledge_base: undefined,
+          linked_knowledge_bases: value?.map(id => ({ id })) ?? null,
         },
       },
     };
   },
 };
-const kbSchema = z.number();
+const kbSchema = z.number().array().min(1);
 
 const kgEnabledAccessor = kgOptionAccessor('enabled');
 const kgEnabledSchema = z.boolean().nullable();
@@ -331,16 +351,14 @@ const kgUsingIntentSearchAccessor = kgOptionAccessor('using_intent_search');
 const kgUsingIntentSearchSchema = z.boolean().nullable();
 
 const kgDepthAccessor = kgOptionAccessor('depth');
-const kgDepthSchema = z.string().pipe(z.coerce.number().int().min(1)).nullable();
+const kgDepthSchema = z.number().int().min(1).nullable();
 
 const hideSourcesAccessor = optionAccessor('hide_sources');
 const hideSourcesSchema = z.boolean().nullable();
 
 const llmPromptFields = [
   'condense_question_prompt',
-  'condense_answer_prompt',
   'text_qa_prompt',
-  'refine_prompt',
   'intent_graph_knowledge',
   'normal_graph_knowledge',
   'clarifying_question_prompt',
@@ -379,7 +397,7 @@ const externalEngineSchema = z.string().nullable();
 function Section ({ title, children }: { title: string, children: ReactNode }) {
   return (
     <>
-      <SecondaryNavigatorMain className="max-w-screen-sm space-y-8 px-2" value={title} strategy="mount">
+      <SecondaryNavigatorMain className="max-w-screen-sm space-y-8 px-2 pb-8" value={title} strategy="mount">
         {children}
       </SecondaryNavigatorMain>
     </>
@@ -394,3 +412,13 @@ function SubSection ({ title, children }: { title: ReactNode, children: ReactNod
     </section>
   );
 }
+
+const promptDescriptions: Record<typeof llmPromptFields[number], string> = {
+  'condense_question_prompt': 'Prompt template for condensing a conversation history and follow-up question into a standalone question',
+  'text_qa_prompt': 'Prompt template for generating answers based on provided context and question',
+  'intent_graph_knowledge': 'Prompt template for processing and extracting knowledge from graph-based traversal methods',
+  'normal_graph_knowledge': 'Prompt template for processing and extracting knowledge from graph-based traversal methods',
+  'clarifying_question_prompt': 'Prompt template for generating clarifying questions when the user\'s input needs more context or specificity',
+  'generate_goal_prompt': 'Prompt template for generating conversation goals and objectives based on user input',
+  'further_questions_prompt': 'Prompt template for generating follow-up questions to continue the conversation',
+};

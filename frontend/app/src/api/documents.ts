@@ -14,26 +14,6 @@ export const mimeTypes = [
 
 const mimeValues: (typeof mimeTypes)[number]['value'] = mimeTypes.map(m => m.value) as never;
 
-//"id": 396505,
-//             "hash": "1022309282298755521",
-//             "name": "b (1).txt",
-//             "content": "abc",
-//             "mime_type": "text/plain",
-//             "source_uri": "uploads/01907db88850795d855b552663c18c9f/1731058150-01930b1b2df979fd80b6f9dea8d0328e.txt",
-//             "meta": {},
-//             "index_status": "completed",
-//             "index_result": null,
-//             "data_source": {
-//                 "id": 630003,
-//                 "name": "Test"
-//             },
-//             "knowledge_base": {
-//                 "id": 1,
-//                 "name": "Lorem Ipsum"
-//             },
-//             "last_modified_at": "2024-11-08T09:29:10"
-//
-
 export interface Document {
   id: number,
   name: string,
@@ -57,7 +37,7 @@ export interface Document {
   } | null
 }
 
-const documentSchema = z.object({
+export const documentSchema = z.object({
   id: z.number(),
   name: z.string(),
   created_at: zodJsonDate(),
@@ -81,25 +61,28 @@ const documentSchema = z.object({
 }) satisfies ZodType<Document, any, any>;
 
 const zDate = z.coerce.date().or(z.literal('').transform(() => undefined)).optional();
+const zDateRange = z.tuple([zDate, zDate]).optional();
 
 export const listDocumentsFiltersSchema = z.object({
-  name: z.string().optional(),
-  source_uri: z.string().optional(),
-  knowledge_base_id: z.coerce.number().optional(),
-  created_at_start: zDate,
-  created_at_end: zDate,
-  updated_at_start: zDate,
-  updated_at_end: zDate,
-  last_modified_at_start: zDate,
-  last_modified_at_end: zDate,
+  search: z.string().optional(),
+  knowledge_base_id: z.number().optional(),
+  created_at: zDateRange,
+  updated_at: zDateRange,
+  last_modified_at: zDateRange,
   mime_type: z.enum(mimeValues).optional(),
   index_status: z.enum(indexStatuses).optional(),
 });
 
 export type ListDocumentsTableFilters = z.infer<typeof listDocumentsFiltersSchema>;
 
-export async function listDocuments ({ page = 1, size = 10, knowledge_base_id, ...filters }: PageParams & ListDocumentsTableFilters = {}): Promise<Page<Document>> {
-  return await fetch(requestUrl(knowledge_base_id != null ? `/api/v1/admin/knowledge_bases/${knowledge_base_id}/documents` : '/api/v1/admin/documents', { page, size, ...filters }), {
+export async function listDocuments ({ page = 1, size = 10, knowledge_base_id, search, ...filters }: PageParams & ListDocumentsTableFilters = {}): Promise<Page<Document>> {
+  const apiFilters = {
+    ...filters,
+    knowledge_base_id,
+    search: search
+  };
+  const api_url = knowledge_base_id != null ? `/api/v1/admin/knowledge_bases/${knowledge_base_id}/documents` : '/api/v1/admin/documents';
+  return await fetch(requestUrl(api_url, { page, size, ...apiFilters }), {
     headers: await authenticationHeaders(),
   })
     .then(handleResponse(zodPage(documentSchema)));

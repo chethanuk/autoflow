@@ -8,21 +8,15 @@ Knowledge sub-queries:
 Sub-query: {{ sub_query }}
 
   - Entities:
-
 {% for entity in data['entities'] %}
-
     - Name: {{ entity.name }}
-    - Description: {{ entity.description }}
-
+      Description: {{ entity.description }}
 {% endfor %}
 
   - Relationships:
-
 {% for relationship in data['relationships'] %}
-
     - Description: {{ relationship.rag_description }}
-    - Weight: {{ relationship.weight }}
-
+      Weight: {{ relationship.weight }}
 {% endfor %}
 
 {% endfor %}
@@ -35,10 +29,8 @@ Given a list of relationships of a knowledge graph as follows. When there is a c
 Entities:
 
 {% for entity in entities %}
-
 - Name: {{ entity.name }}
-- Description: {{ entity.description }}
-
+  Description: {{ entity.description }}
 {% endfor %}
 
 ---------------------
@@ -65,16 +57,19 @@ The prerequisite questions and their relevant knowledge for the user's main ques
 ---------------------
 
 Task:
-Given the conversation between the user and ASSISTANT, along with the follow-up message from the user, and the provided prerequisite questions and relevant knowledge, determine if the user's question is clear and specific enough for a confident response. If the question lacks necessary details or context, identify the specific ambiguities and generate a clarifying question to address them.
+Given the conversation between the user and ASSISTANT, along with the follow-up message from the user, and the provided prerequisite questions and relevant knowledge, determine if the user's question is clear and specific enough for a confident response. 
+
+If the question lacks necessary details or context, identify the specific ambiguities and generate a clarifying question to address them.
+If the question is clear and answerable, return exact "False" as the response.
 
 Instructions:
 1. Assess Information Sufficiency:
-   - Evaluate if the user’s question provides enough detail to generate a precise answer based on the prerequisite questions, relevant knowledge, and conversation history.
+   - Evaluate if the user's question provides enough detail to generate a precise answer based on the prerequisite questions, relevant knowledge, and conversation history.
    - If the user's question is too vague or lacks key information, identify what additional information would be necessary for clarity.
 
 2. Generate a Clarifying Question:
-   - If the question is clear and answerable, return "False" and leave the clarifying question empty ("").
-   - If clarification is needed, return "True" and generate a specific question to ask the user, directly addressing the information gap. Avoid general questions; focus on the specific details required for an accurate answer.
+   - If the question is clear and answerable, return exact "False" as the response.
+   - If clarification is needed, return a specific question to ask the user, directly addressing the information gap. Avoid general questions; focus on the specific details required for an accurate answer.
 
 3. Use the same language to ask the clarifying question as the user's original question.
 
@@ -85,8 +80,7 @@ Relevant Knowledge: TiDB supports foreign keys starting from version 6.6.0.
 
 Response:
 
-- Clarity Needed: True
-- Clarifying Question: "Which version of TiDB are you using?"
+Which version of TiDB are you using?
 
 Example 2:
 
@@ -95,8 +89,16 @@ Relevant Knowledge: TiDB supports nested transaction starting from version 6.2.0
 
 Response:
 
-- Clarity Needed: True
-- Clarifying Question: "Which version of TiDB are you using?"
+Which version of TiDB are you using?
+
+Example 3:
+
+user: "Does TiDB support foreign keys? I'm using TiDB 6.5.0."
+Relevant Knowledge: TiDB supports foreign keys starting from version 6.6.0.
+
+Response:
+
+False
 
 Your Turn:
 
@@ -114,6 +116,7 @@ Response:
 """
 
 DEFAULT_CONDENSE_QUESTION_PROMPT = """\
+Current Date: {{current_date}}
 ---------------------
 The prerequisite questions and their relevant knowledge for the user's main question.
 ---------------------
@@ -181,7 +184,6 @@ Followup question:
 Refined standalone question:
 """
 
-
 DEFAULT_TEXT_QA_PROMPT = """\
 Current Date: {{current_date}}
 ---------------------
@@ -194,7 +196,7 @@ Knowledge graph information is below
 Context information is below.
 ---------------------
 
-<<context_str>>
+{{context_str}}
 
 ---------------------
 
@@ -231,45 +233,10 @@ The Original questions is:
 {{original_question}}
 
 The Refined Question used to search:
-<<query_str>>
+
+{{query_str}}
 
 Answer:
-"""
-
-DEFAULT_REFINE_PROMPT = """\
-The Original questions is:
-
-{{original_question}}
-
-Refined Question used to search:
-<<query_str>>
-
----------------------
-We have provided an existing answer:
----------------------
-
-<<existing_answer>>
-
----------------------
-We have the opportunity to refine the existing answer (only if needed) with some more knowledge graph and context information below.
-
----------------------
-Knowledge graph information is below
----------------------
-
-{{graph_knowledges}}
-
----------------------
-Context information is below.
----------------------
-
-<<context_msg>>
-
----------------------
-Given the new context, refine the original answer to better answer the query. If the context isn't useful, return the original answer.
-And the answer should use the same language with the question. If the answer has different language with the original question, please translate it to the same language with the question.
-
-Refined Answer:
 """
 
 DEFAULT_FURTHER_QUESTIONS_PROMPT = """\
@@ -288,47 +255,9 @@ Instructions:
 4. Keep questions concise yet insightful to maximize engagement.
 5. Use the same language with the chat message content.
 6. Each question should end with a question mark.
+7. Each question should be in a new line, DO NOT add any indexes or blank lines, just output the questions.
 
 Now, generate 3–5 follow-up questions below:
-"""
-
-DEFAULT_CONDENSE_ANSWER_PROMPT = """\
-Refine the agent-provided answer into the language used by the user (if different) and make stylistic adjustments for better readability.
-Do not alter any content; all claims and facts must remain based on the agent-provided answer.
-
-#### Variables:
-
-Chat history:
-
-- Previous chat history:
-
-{{ chat_history }}
-
-- User's followup question:
-
-{{ question }}
-
----------------------
-
-Agent's answer:
-
-{{ agent_answer }}
-
----------------------
-
-Now perform your task as follows:
-
-#### Requirements:
-1. **Language Detection**:
-    - Identify the language used in the user's communication.
-    - If it differs from the agent answer's language, translate accordingly.
-2. **Stylistic Enhancement**:
-    - Improve sentence flow and readability without changing the original meaning.
-3. **Content Integrity**:
-    - Maintain all original claims and facts from the agent answer.
-    - Do not add new information or opinions.
-
-Output the final answer for the user directly.
 """
 
 DEFAULT_GENERATE_GOAL_PROMPT = """\
@@ -337,16 +266,38 @@ Given the conversation history between the User and Assistant, along with the la
 1. **Language Detection**:
     - Analyze the User's follow-up question to determine the language used.
 
-2. **Goal Generation**:
-    - Determine the latest User intent from the follow-up question and the chat history.
-    - Reformulate the latest User follow-up question into a clear, standalone question suitable for processing by the agent.
-    - Specify the detected language for the answer.
-    - Define the desired answer format.
-    - Include any additional requirements as needed.
+2. **Context Classification**:
+    - **Determine Relevance to TiDB**:
+        - Assess whether the follow-up question is related to TiDB products, support, or any TiDB-related context.
+    - **Set Background Accordingly**:
+        - **If Related to TiDB**:
+            - Set the background to encompass the relevant TiDB context. This may include aspects like TiDB features, configurations, best practices, troubleshooting, or general consulting related to TiDB.
+            - Example backgrounds:
+                - "TiDB product configuration and optimization."
+                - "TiDB troubleshooting and support."
+                - "TiDB feature consultation."
+        - **If Unrelated to TiDB**:
+            - Set the background to "Other topics."
 
-3. **Output**:
+3. **Goal Generation**:
+    - **Clarify Intent to Avoid Ambiguity**:
+        - **Instructional Guidance**:
+            - If the User's question seeks guidance or a method (e.g., starts with "How to"), ensure the goal reflects a request for a step-by-step guide or best practices.
+        - **Information Retrieval**:
+            - If the User's question seeks specific information or confirmation (e.g., starts with "Can you" or "Is it possible"), rephrase it to focus on providing the requested information or verification without implying that the assistant should perform any actions.
+            - **Important**: Do not interpret these questions as requests for the assistant to execute operations. Instead, understand whether the user seeks to confirm certain information or requires a proposed solution, and restrict responses to information retrieval and guidance based on available documentation.
+    - **Reformulate the Latest User Follow-up Question**:
+        - Ensure the question is clear, directive, and suitable for a Q&A format.
+    - **Specify Additional Details**:
+        - **Detected Language**: Clearly indicate the language.
+        - **Desired Answer Format**: Specify if the answer should be in text, table, code snippet, etc.
+        - **Additional Requirements**: Include any other necessary instructions to tailor the response appropriately.
+
+4. **Output**:
     - Produce a goal string in the following format:
       "[Refined Question] (Lang: [Detected Language], Format: [Format], Background: [Specified Goal Scenario])"
+
+**Examples**:
 
 **Example 1**:
 
@@ -358,11 +309,11 @@ Follow-up question:
 
 "tidb encryption at rest 会影响数据压缩比例吗？"
 
----------------------
-
 Goal:
 
 Does encryption at rest in TiDB affect the data compression ratio? (Lang: Chinese, Format: text, Background: TiDB product related consulting.)
+
+---------------------
 
 **Example 2**:
 
@@ -378,19 +329,65 @@ Goal:
 
 What can you do? (Lang: Chinese, Format: text, Background: General inquiry about the assistant's capabilities.)
 
+---------------------
+
+**Example 3**:
+
+Chat history:
+
+[]
+
+Follow-up question:
+
+"oracle 怎么样？"
+
+Goal:
+
+How is Oracle? (Lang: Chinese, Format: text, Background: Other topics.)
+
+---------------------
+
+**Example 4**:
+
+Chat history:
+
+[]
+
+Follow-up question:
+
+"Why is TiDB Serverless up to 70% cheaper than MySQL RDS? (use a table if possible)"
+
+Goal:
+
+Why is TiDB Serverless up to 70% cheaper than MySQL RDS? Please provide a comparison in a table format if possible. (Lang: English, Format: table, Background: Cost comparison between TiDB Serverless and MySQL RDS.)
+
+---------------------
+
+**Example 5 (Enhanced for Clarity and Guidance)**:
+
+Chat history:
+
+[]
+
+Follow-up question:
+
+"能否找到 tidb 中哪些视图的定义中包含已经被删除的表？"
+
+Goal:
+
+How to find which views in TiDB have definitions that include tables that have been deleted? (Lang: Chinese, Format: text, Background: TiDB product related consulting.)
+
+---------------------
+
 **Your Task**:
 
 Chat history:
 
 {{chat_history}}
 
----------------------
-
 Follow-up question:
 
 {{question}}
-
----------------------
 
 Goal:
 """

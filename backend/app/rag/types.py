@@ -1,21 +1,4 @@
 import enum
-from typing import Any
-from pydantic import BaseModel
-
-
-class MessageRole(str, enum.Enum):
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
-
-
-# Cannot reuse the llama-index's ChatMessage
-# because it use pydantic v1 and this project use pydantic v2.
-# https://github.com/run-llama/llama_index/issues/13477
-class ChatMessage(BaseModel):
-    role: MessageRole = MessageRole.USER
-    content: str = ""
-    additional_kwargs: dict[str, Any] = {}
 
 
 # Langfuse needs an enum class for event types,
@@ -37,9 +20,12 @@ class MyCBEventType(str, enum.Enum):
     AGENT_STEP = "agent_step"
     CLARIFYING_QUESTION = "clarifying_question"
     CONDENSE_QUESTION = "condense_question"
+    REFINE_QUESTION = "refine_question"
     RETRIEVE_FROM_GRAPH = "retrieve_from_graph"
     INTENT_DECOMPOSITION = "intent_decomposition"
     GRAPH_SEMANTIC_SEARCH = "graph_semantic_search"
+    SELECT_KNOWLEDGE_BASE = "select_knowledge_base"
+    RUN_SUB_QUERIES = "run_sub_queries"
 
 
 # Chat stream response event types

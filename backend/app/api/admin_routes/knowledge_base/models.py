@@ -3,19 +3,30 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, field_validator, Field
 
-from app.api.admin_routes.knowledge_base.data_source.models import KBDataSource, KBDataSourceCreate
-from app.api.admin_routes.models import EmbeddingModelDescriptor, LLMDescriptor, UserDescriptor
+from app.api.admin_routes.knowledge_base.data_source.models import (
+    KBDataSource,
+    KBDataSourceCreate,
+)
+from app.api.admin_routes.models import (
+    EmbeddingModelDescriptor,
+    LLMDescriptor,
+    UserDescriptor,
+)
 from app.exceptions import KBNoVectorIndexConfigured
 from app.models import KgIndexStatus
-from app.models.knowledge_base import IndexMethod
+from app.models.knowledge_base import IndexMethod, GeneralChunkingConfig, ChunkingConfig
+
 
 class KnowledgeBaseCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    index_methods: list[IndexMethod] = Field(default_factory=lambda: [IndexMethod.VECTOR])
+    index_methods: list[IndexMethod] = Field(
+        default_factory=lambda: [IndexMethod.VECTOR]
+    )
     llm_id: Optional[int] = None
     embedding_model_id: Optional[int] = None
-    data_sources: Optional[list[KBDataSourceCreate]] = Field(default_factory=list)
+    chunking_config: ChunkingConfig = Field(default_factory=GeneralChunkingConfig)
+    data_sources: list[KBDataSourceCreate] = Field(default_factory=list)
 
     @field_validator("name")
     def name_must_not_be_blank(cls, v: str) -> str:
@@ -35,20 +46,23 @@ class KnowledgeBaseCreate(BaseModel):
 class KnowledgeBaseUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    chunking_config: Optional[ChunkingConfig] = None
 
 
 class KnowledgeBaseDetail(BaseModel):
     """
     Represents a detailed view of a knowledge base.
     """
+
     id: int
     name: str
-    description: str
+    description: Optional[str] = None
     documents_total: int
     data_sources_total: int
     # Notice: By default, SQLModel will not serialize list type relationships.
     # https://github.com/fastapi/sqlmodel/issues/37#issuecomment-2093607242
     data_sources: list[KBDataSource]
+    chunking_config: Optional[ChunkingConfig] = None
     index_methods: list[IndexMethod]
     llm_id: int | None = None
     llm: LLMDescriptor | None = None
@@ -63,9 +77,10 @@ class KnowledgeBaseItem(BaseModel):
     """
     Represents a simplified view of a knowledge base for list display purposes.
     """
+
     id: int
     name: str
-    description: str
+    description: Optional[str] = None
     documents_total: int
     data_sources_total: int
     index_methods: list[IndexMethod]

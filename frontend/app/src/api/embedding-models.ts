@@ -27,8 +27,15 @@ export interface CreateEmbeddingModel {
   name: string;
   provider: string;
   model: string;
+  vector_dimension: number;
   config?: any;
   credentials: string | object;
+}
+
+export interface UpdateEmbeddingModel {
+  name?: string;
+  config?: any;
+  credentials?: string | object;
 }
 
 export const embeddingModelSummarySchema = z.object({
@@ -52,7 +59,7 @@ const embeddingModelOptionSchema = providerOptionSchema.and(z.object({
 })) satisfies ZodType<EmbeddingModelOption, any, any>;
 
 export async function listEmbeddingModelOptions () {
-  return await fetch(requestUrl(`/api/v1/admin/embedding-models/options`), {
+  return await fetch(requestUrl(`/api/v1/admin/embedding-models/providers/options`), {
     headers: await authenticationHeaders(),
   })
     .then(handleResponse(embeddingModelOptionSchema.array()));
@@ -76,6 +83,17 @@ export async function createEmbeddingModel (create: CreateEmbeddingModel) {
   return await fetch(requestUrl(`/api/v1/admin/embedding-models`), {
     method: 'POST',
     body: JSON.stringify(create),
+    headers: {
+      'Content-Type': 'application/json',
+      ...await authenticationHeaders(),
+    },
+  }).then(handleResponse(embeddingModelSchema));
+}
+
+export async function updateEmbeddingModel (id: number, update: UpdateEmbeddingModel) {
+  return await fetch(requestUrl(`/api/v1/admin/embedding-models/${id}`), {
+    method: 'PUT',
+    body: JSON.stringify(update),
     headers: {
       'Content-Type': 'application/json',
       ...await authenticationHeaders(),

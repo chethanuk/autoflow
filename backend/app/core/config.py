@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     DOMAIN: str = "localhost"
     ENVIRONMENT: Environment = Environment.LOCAL
+    LOG_LEVEL: str = "INFO"
+    SQLALCHEMY_LOG_LEVEL: str = "WARNING"
 
     SESSION_COOKIE_NAME: str = "session"
     # 90 days
@@ -95,14 +97,12 @@ class Settings(BaseSettings):
     COMPLIED_INTENT_ANALYSIS_PROGRAM_PATH: str | None = None
     COMPLIED_PREREQUISITE_ANALYSIS_PROGRAM_PATH: str | None = None
 
-    # CAUTION: Do not change EMBEDDING_DIMS after initializing the database.
-    # Changing the embedding dimensions requires recreating the database and tables.
-    # The default EMBEDDING_DIMS and EMBEDDING_MAX_TOKENS are set for the OpenAI text-embedding-3-small model.
-    # If using a different embedding model, adjust these values according to the model's specifications.
-    # For example:
-    #   maidalun1020/bce-embedding-base_v1: EMBEDDING_DIMS=768   EMBEDDING_MAX_TOKENS=512
+    # NOTICE: EMBEDDING_DIMS and EMBEDDING_MAX_TOKENS is deprecated and
+    # will be removed in the future.
     EMBEDDING_DIMS: int = 1536
-    EMBEDDING_MAX_TOKENS: int = 8191
+    EMBEDDING_MAX_TOKENS: int = 2048
+
+    EVALUATION_OPENAI_API_KEY: str | None = None
 
     @computed_field  # type: ignore[misc]
     @property
@@ -138,7 +138,7 @@ class Settings(BaseSettings):
         secret = self.SECRET_KEY
         if not secret:
             raise ValueError(
-                f"Please set a secret key using the SECRET_KEY environment variable."
+                "Please set a secret key using the SECRET_KEY environment variable."
             )
 
         min_length = 32

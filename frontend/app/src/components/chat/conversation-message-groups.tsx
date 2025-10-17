@@ -92,7 +92,7 @@ function ConversationMessageGroup ({ group, isLastGroup }: { group: ChatMessageG
     >
       <Collapsible open={debugInfoOpen} onOpenChange={setDebugInfoOpen}>
         <div className="relative pr-12">
-          <h2 className="text-2xl font-normal">{group.user.content}</h2>
+          <h2 className="text-2xl font-normal whitespace-pre-wrap">{group.user.content}</h2>
           {enableDebug && <CollapsibleTrigger asChild>
             <Button className="absolute right-0 top-0 z-0 rounded-full" variant="ghost" size="sm">
               <InfoIcon className="h-4 w-4" />
@@ -123,7 +123,10 @@ function ConversationMessageGroup ({ group, isLastGroup }: { group: ChatMessageG
 
       <MessageVerify assistant={group.assistant} />
 
-      {!params && isLastGroup && group.hasLastAssistantMessage && <MessageRecommendQuestions assistant={group.assistant} />}
+      {/* Only show recommend questions if enabled in engine_options */}
+      {!params && isLastGroup && group.hasLastAssistantMessage && engine_options?.further_questions !== false && (
+        <MessageRecommendQuestions assistant={group.assistant} />
+      )}
     </section>
   );
 }

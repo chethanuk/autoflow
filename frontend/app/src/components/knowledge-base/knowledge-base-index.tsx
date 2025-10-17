@@ -1,19 +1,22 @@
 'use client';
 
+import { actions } from '@/components/cells/actions';
 import { type DatasourceKgIndexError, type DatasourceVectorIndexError } from '@/api/datasources';
-import { listKnowledgeBaseKgIndexErrors, listKnowledgeBaseVectorIndexErrors, retryKnowledgeBaseAllFailedTasks } from '@/api/knowledge-base';
+import { listKnowledgeBaseKgIndexErrors, listKnowledgeBaseVectorIndexErrors, rebuildKBDocumentIndex, retryKnowledgeBaseAllFailedTasks } from '@/api/knowledge-base';
+import { errorMessageCell } from '@/components/cells/error-message';
 import { link } from '@/components/cells/link';
 import { IndexProgressChart, IndexProgressChartPlaceholder } from '@/components/charts/IndexProgressChart';
 import { TotalCard } from '@/components/charts/TotalCard';
 import { DangerousActionButton } from '@/components/dangerous-action-button';
 import { DataTableRemote } from '@/components/data-table-remote';
 import { useKnowledgeBaseIndexProgress } from '@/components/knowledge-base/hooks';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { ColumnDef } from '@tanstack/react-table';
 import { createColumnHelper } from '@tanstack/table-core';
-import { ArrowRightIcon, FileTextIcon, PuzzleIcon, RouteIcon } from 'lucide-react';
+import { ArrowRightIcon, DownloadIcon, FileTextIcon, PuzzleIcon, RouteIcon, WrenchIcon } from 'lucide-react';
 import Link from 'next/link';
+import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errors';
 
 export function KnowledgeBaseIndexProgress ({ id }: { id: number }) {
   const { progress, isLoading } = useKnowledgeBaseIndexProgress(id);
@@ -49,8 +52,8 @@ export function KnowledgeBaseIndexProgress ({ id }: { id: number }) {
         />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4">
-        {progress ? <IndexProgressChart title="Vector Index" data={progress.vector_index} /> : <IndexProgressChartPlaceholder title="Vector Index" />}
-        {progress?.kg_index ? <IndexProgressChart title="Knowledge Graph Index" data={progress.kg_index} /> : <IndexProgressChartPlaceholder title="Knowledge Graph Index" />}
+        {progress ? <IndexProgressChart title="Vector Index" data={progress.vector_index} label="Total Documents" /> : <IndexProgressChartPlaceholder title="Vector Index" label="Total Documents" />}
+        {progress?.kg_index ? <IndexProgressChart title="Knowledge Graph Index" data={progress.kg_index} label="Total Chunks" /> : <IndexProgressChartPlaceholder title="Knowledge Graph Index" label="Total Chunks" />}
       </div>
       <KnowledgeBaseIndexErrors id={id} />
     </>
@@ -72,16 +75,16 @@ export function KnowledgeBaseIndexErrors ({ id }: { id: number }) {
 
   return (
     <section className="space-y-4">
-      <h3>Index Errors</h3>
+      <h3>Failed Tasks</h3>
       <Tabs defaultValue={showVectorIndexErrors ? 'vector-index-errors' : 'kg-index-errors'}>
         <div className="flex items-center">
           <TabsList>
-            {showVectorIndexErrors && <TabsTrigger value="vector-index-errors">
+            <TabsTrigger value="vector-index-errors">
               Vector Index
-            </TabsTrigger>}
-            {showKgIndexErrors && <TabsTrigger value="kg-index-errors">
+            </TabsTrigger>
+            <TabsTrigger value="kg-index-errors">
               KnowledgeGraph Index
-            </TabsTrigger>}
+            </TabsTrigger>
           </TabsList>
           <DangerousActionButton
             className="ml-auto"
@@ -96,85 +99,143 @@ export function KnowledgeBaseIndexErrors ({ id }: { id: number }) {
           </DangerousActionButton>
 
         </div>
-        {showVectorIndexErrors && <TabsContent value="vector-index-errors">
-          <KBVectorIndexErrorsTable id={id} />
-        </TabsContent>}
-        {showKgIndexErrors && <TabsContent value="kg-index-errors">
-          <KBKGIndexErrorsTable id={id} />
-        </TabsContent>}
+        <TabsContent value="vector-index-errors">
+          <KBVectorIndexErrorsTable kb_id={id} />
+        </TabsContent>
+        <TabsContent value="kg-index-errors">
+          <KBKGIndexErrorsTable kb_id={id} />
+        </TabsContent>
       </Tabs>
     </section>
   );
 }
 
-function KBVectorIndexErrorsTable ({ id }: { id: number }) {
+function KBVectorIndexErrorsTable ({ kb_id }: { kb_id: number }) {
   return (
     <DataTableRemote<DatasourceVectorIndexError, any>
-      api={(params) => listKnowledgeBaseVectorIndexErrors(id, params)}
-      apiKey={`datasources.${id}.vector-index-errors`}
-      columns={vectorIndexErrorsColumns}
+      api={(params) => listKnowledgeBaseVectorIndexErrors(kb_id, params)}
+      apiKey={`datasources.${kb_id}.vector-index-errors`}
+      columns={getVectorIndexErrorsColumns(kb_id)}
       idColumn="document_id"
     />
   );
 }
 
-function KBKGIndexErrorsTable ({ id }: { id: number }) {
+function KBKGIndexErrorsTable ({ kb_id }: { kb_id: number }) {
   return (
     <DataTableRemote<DatasourceKgIndexError, any>
-      api={(params) => listKnowledgeBaseKgIndexErrors(id, params)}
-      apiKey={`datasources.${id}.kg-index-errors`}
-      columns={kgIndexErrorsColumns}
+      api={(params) => listKnowledgeBaseKgIndexErrors(kb_id, params)}
+      apiKey={`datasources.${kb_id}.kg-index-errors`}
+      columns={getKgIndexErrorsColumns(kb_id)}
       idColumn="chunk_id"
     />
   );
 }
 
 const vectorIndexErrorsHelper = createColumnHelper<DatasourceVectorIndexError>();
-const vectorIndexErrorsColumns: ColumnDef<DatasourceVectorIndexError, any>[] = [
-  vectorIndexErrorsHelper.display({
-    header: 'Document', cell: ({ row }) => (
+const getVectorIndexErrorsColumns = (kb_id: number): ColumnDef<DatasourceVectorIndexError, any>[] => {
+  return [
+    vectorIndexErrorsHelper.display({
+      header: 'Document', cell: ({ row }) => (
+        <>
+          {row.original.document_name}
+          {' '}
+          <span className="text-muted-foreground">#{row.original.document_id}</span>
+        </>
+      ),
+    }),
+    vectorIndexErrorsHelper.accessor('source_uri', {
+      header: 'Source URI',
+      cell: link({ icon: <DownloadIcon className="size-3" />, truncate: true })
+    }),
+    vectorIndexErrorsHelper.accessor('error', {
+      header: 'Error message',
+      cell: errorMessageCell(),
+    }),
+    vectorIndexErrorsHelper.display({
+      id: 'op',
+      cell: actions(row => [
+        {
+          type: 'label',
+          title: 'Actions',
+        },
+        {
+          key: 'rebuild-index',
+          title: 'Rebuild Index',
+          icon: <WrenchIcon className="size-3" />,
+          action: async (context) => {
+            try {
+              await rebuildKBDocumentIndex(kb_id, row.document_id);
+              context.table.reload?.();
+              context.startTransition(() => {
+                context.router.refresh();
+              });
+              context.setDropdownOpen(false);
+              toast.success(`Successfully rebuild index for document "${row.document_name}"`);
+            } catch (e) {
+              toast.error(`Failed to rebuild index for document "${row.document_name}"`, {
+                description: getErrorMessage(e),
+              });
+              return Promise.reject(e);
+            }
+          },
+        },
+      ]),
+    }),
+  ]
+};
+
+const kgIndexErrorsHelper = createColumnHelper<DatasourceKgIndexError>();
+const getKgIndexErrorsColumns = (kb_id: number): ColumnDef<DatasourceKgIndexError, any>[] => {
+  return [
+    kgIndexErrorsHelper.display({
+      header: 'Document',
+      cell: ({ row }) => (
       <>
         {row.original.document_name}
         {' '}
         <span className="text-muted-foreground">#{row.original.document_id}</span>
       </>
     ),
-  }),
-  vectorIndexErrorsHelper.accessor('source_uri', { header: 'Source URI', cell: link({ url: row => row.source_uri, text: row => row.source_uri }) }),
-  vectorIndexErrorsHelper.accessor('error', {
-    cell: ({ getValue }) => <ErrorPopper>{getValue()}</ErrorPopper>,
-  }),
-];
-
-const kgIndexErrorsHelper = createColumnHelper<DatasourceKgIndexError>();
-const kgIndexErrorsColumns: ColumnDef<DatasourceKgIndexError, any>[] = [
-  kgIndexErrorsHelper.accessor('source_uri', { header: 'Source URI', cell: link({ url: row => row.source_uri, text: row => row.source_uri }) }),
-  kgIndexErrorsHelper.accessor('chunk_id', {}),
-  kgIndexErrorsHelper.accessor('error', {
-    cell: ({ getValue }) => <ErrorPopper>{getValue()}</ErrorPopper>,
-  }),
-];
-
-function ErrorPopper ({ children }: { children: string | null }) {
-  if (!children || children.length <= 25) {
-    return children;
-  }
-
-  const shortcut = children.slice(0, 25);
-
-  return (
-    <HoverCard>
-      <HoverCardTrigger>
-        {shortcut}{'... '}
-        <span className="text-muted-foreground">
-          ({children.length + ' characters'})
-        </span>
-      </HoverCardTrigger>
-      <HoverCardContent className="w-96 h-48">
-        <div className="size-full overflow-scroll">
-          <pre className="whitespace-pre">{children}</pre>
-        </div>
-      </HoverCardContent>
-    </HoverCard>
-  );
-}
+    }),
+    kgIndexErrorsHelper.accessor('source_uri', {
+      header: 'Source URI',
+      cell: link({ icon: <DownloadIcon className="size-3" />, truncate: true })
+    }),
+    kgIndexErrorsHelper.accessor('chunk_id', { header: 'Chunk ID' }),
+    kgIndexErrorsHelper.accessor('error', {
+      header: 'Error message',
+      cell: errorMessageCell(),
+    }),
+    kgIndexErrorsHelper.display({
+      id: 'op',
+      cell: actions(row => [
+        {
+          type: 'label',
+          title: 'Actions',
+        },
+        {
+          key: 'rebuild-index',
+          title: 'Rebuild Index',
+          icon: <WrenchIcon className="size-3" />,
+          action: async (context) => {
+            try {
+              await rebuildKBDocumentIndex(kb_id, row.document_id);
+              context.table.reload?.();
+              context.startTransition(() => {
+                context.router.refresh();
+              });
+              context.setDropdownOpen(false);
+              toast.success(`Successfully rebuild knowledge graph index for document "${row.document_name}"`);
+            } catch (e) {
+              toast.error(`Failed to rebuild knowledge graph index for document "${row.document_name}"`, {
+                description: getErrorMessage(e),
+              });
+              return Promise.reject(e);
+            }
+          },
+        },
+      ]),
+    }),
+  ]
+};

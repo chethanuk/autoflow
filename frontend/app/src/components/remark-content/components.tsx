@@ -14,10 +14,11 @@ function dirtyRewrite (some: any, id: string): any {
   if (typeof some !== 'object') return some;
 
   if (isElement(some) || isFragment(some)) {
+    const props = some.props as any;
     return cloneElement(some, {
-      ...some.props,
-      ...some.props.id ? { id: `${id}--${some.props.id}` } : {},
-      children: dirtyRewrite(some.props.children, id),
+      ...props,
+      ...props.id ? { id: `${id}--${props.id}` } : {},
+      children: dirtyRewrite(props.children, id),
     });
   }
 
@@ -52,7 +53,7 @@ export const getRehypeReactOptions = ({ portalContainer }: { portalContainer: HT
       // eslint-disable-next-line react-hooks/rules-of-hooks
       const [link, setLink] = useState<{ title: string, href: string | false }>();
 
-      if (!(props as any)['data-footnote-ref']) return <a {...props} />;
+      if (!(props as any)['data-footnote-ref']) return <a {...props} target="_blank" />;
 
       return (
         <HoverCard openDelay={0} onOpenChange={open => {

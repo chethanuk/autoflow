@@ -1,6 +1,6 @@
 import { authenticationHeaders, handleErrors, handleResponse, type Page, type PageParams, requestUrl, zodPage } from '@/lib/request';
 import { zodJsonDate } from '@/lib/zod';
-import { number, z, type ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
 
 export interface ChatEngine {
   id: number;
@@ -28,6 +28,7 @@ export interface ChatEngineOptions {
     stream_chat_api_url?: string | null
   } | null;
   clarify_question?: boolean | null;
+  further_questions?: boolean | null;
   knowledge_base?: ChatEngineKnowledgeBaseOptions | null;
   knowledge_graph?: ChatEngineKnowledgeGraphOptions | null;
   llm?: ChatEngineLLMOptions | null;
@@ -37,7 +38,11 @@ export interface ChatEngineOptions {
 }
 
 export interface ChatEngineKnowledgeBaseOptions {
+  /**
+   * @deprecated
+   */
   linked_knowledge_base?: LinkedKnowledgeBaseOptions | null;
+  linked_knowledge_bases?: { id: number }[] | null;
 }
 
 export interface ChatEngineKnowledgeGraphOptions {
@@ -50,9 +55,7 @@ export interface ChatEngineKnowledgeGraphOptions {
 
 export type ChatEngineLLMOptions = {
   condense_question_prompt?: string | null
-  condense_answer_prompt?: string | null
   text_qa_prompt?: string | null
-  refine_prompt?: string | null
   intent_graph_knowledge?: string | null
   normal_graph_knowledge?: string | null
   clarifying_question_prompt?: string | null
@@ -60,12 +63,16 @@ export type ChatEngineLLMOptions = {
   further_questions_prompt?: string | null
 }
 
+/**
+ * @deprecated
+ */
 export interface LinkedKnowledgeBaseOptions {
   id?: number | null;
 }
 
 const kbOptionsSchema = z.object({
-  linked_knowledge_base: z.object({ id: number().nullable().optional() }).nullable().optional(),
+  linked_knowledge_base: z.object({ id: z.number().nullable().optional() }).nullable().optional(),
+  linked_knowledge_bases: z.object({ id: z.number() }).array().nullable().optional(),
 }).passthrough();
 
 const kgOptionsSchema = z.object({
@@ -79,9 +86,7 @@ const kgOptionsSchema = z.object({
 const llmOptionsSchema =
   z.object({
     condense_question_prompt: z.string().nullable().optional(),
-    condense_answer_prompt: z.string().nullable().optional(),
     text_qa_prompt: z.string().nullable().optional(),
-    refine_prompt: z.string().nullable().optional(),
     intent_graph_knowledge: z.string().nullable().optional(),
     normal_graph_knowledge: z.string().nullable().optional(),
     clarifying_question_prompt: z.string().nullable().optional(),
@@ -97,13 +102,26 @@ const chatEngineOptionsSchema = z.object({
     stream_chat_api_url: z.string().optional().nullable(),
   }).nullable().optional(),
   clarify_question: z.boolean().nullable().optional(),
+  further_questions: z.boolean().nullable().optional(),
   knowledge_base: kbOptionsSchema.nullable().optional(),
   knowledge_graph: kgOptionsSchema.nullable().optional(),
   llm: llmOptionsSchema.nullable().optional(),
   post_verification_url: z.string().nullable().optional(),
   post_verification_token: z.string().nullable().optional(),
   hide_sources: z.boolean().nullable().optional(),
-}).passthrough() satisfies ZodType<ChatEngineOptions, any, any>;
+}).passthrough()
+  .refine(option => {
+    if (!option.knowledge_base?.linked_knowledge_bases?.length) {
+      if (option.knowledge_base?.linked_knowledge_base?.id != null) {
+        // Frontend temporary migration. Should be removed after backend removed linked_knowledge_base field.
+        option.knowledge_base.linked_knowledge_bases = [{
+          id: option.knowledge_base.linked_knowledge_base.id,
+        }];
+        delete option.knowledge_base.linked_knowledge_base;
+      }
+    }
+    return option;
+  }) satisfies ZodType<ChatEngineOptions, any, any>;
 
 const chatEngineSchema = z.object({
   id: z.number(),

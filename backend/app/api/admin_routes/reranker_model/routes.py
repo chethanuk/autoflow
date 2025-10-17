@@ -1,39 +1,51 @@
-import logging
 from typing import List
 
-from fastapi import Depends, HTTPException, APIRouter
+from fastapi import Depends, APIRouter
 from fastapi_pagination import Params, Page
-from fastapi_pagination.ext.sqlmodel import paginate
-
+from pydantic import BaseModel
 from llama_index.core.schema import NodeWithScore, TextNode
-from sqlalchemy import update
-from sqlmodel import select
-from starlette import status
 
 from app.api.admin_routes.llm.routes import LLMTestResult
 from app.api.deps import CurrentSuperuserDep, SessionDep
-from app.exceptions import RerankerModelNotFound, InternalServerError
-from app.models import RerankerModel, AdminRerankerModel, ChatEngine
-from app.rag.chat_config import get_reranker_model
-from app.rag.reranker_model_option import RerankerModelOption, admin_reranker_model_options
+from app.models import RerankerModel, AdminRerankerModel
+from app.models.reranker_model import RerankerModelUpdate
 from app.repositories.reranker_model import reranker_model_repo
+from app.rag.rerankers.provider import RerankerProviderOption, reranker_provider_options
+from app.rag.rerankers.resolver import resolve_reranker
+
+from app.logger import logger
+
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
-@router.get("/admin/reranker-models/options")
-def get_reranker_model_options(user: CurrentSuperuserDep) -> List[RerankerModelOption]:
-    return admin_reranker_model_options
+@router.get("/admin/reranker-models/providers/options")
+def list_reranker_model_provider_options(
+    user: CurrentSuperuserDep,
+) -> List[RerankerProviderOption]:
+    return reranker_provider_options
+
+
+@router.get("/admin/reranker-models")
+def list_reranker_models(
+    db_session: SessionDep,
+    user: CurrentSuperuserDep,
+    params: Params = Depends(),
+) -> Page[AdminRerankerModel]:
+    return reranker_model_repo.paginate(db_session, params)
+
+
+class RerankerModelTestResult(BaseModel):
+    success: bool
+    error: str = ""
 
 
 @router.post("/admin/reranker-models/test")
 def test_reranker_model(
-    db_reranker_model: RerankerModel,
-    user: CurrentSuperuserDep
+    db_reranker_model: RerankerModel, user: CurrentSuperuserDep
 ) -> LLMTestResult:
     try:
-        reranker = get_reranker_model(
+        reranker = resolve_reranker(
             provider=db_reranker_model.provider,
             model=db_reranker_model.model,
             # for testing purpose, we only rerank 2 nodes
@@ -41,7 +53,7 @@ def test_reranker_model(
             config=db_reranker_model.config,
             credentials=db_reranker_model.credentials,
         )
-        reranker.postprocess_nodes(
+        reranked_nodes = reranker.postprocess_nodes(
             nodes=[
                 NodeWithScore(
                     node=TextNode(
@@ -51,7 +63,7 @@ def test_reranker_model(
                 ),
                 NodeWithScore(
                     node=TextNode(
-                        text="TiDB is compatible with MySQL protocol.",
+                        text="TiKV is a distributed key-value storage engine.",
                     ),
                     score=0.6,
                 ),
@@ -64,63 +76,59 @@ def test_reranker_model(
             ],
             query_str="What is TiDB?",
         )
+        if len(reranked_nodes) != 2:
+            raise ValueError("expected 2 nodes, but got %d", len(reranked_nodes))
         success = True
         error = ""
     except Exception as e:
+        logger.info(f"Failed to test reranker model: {e}")
         success = False
         error = str(e)
-    return LLMTestResult(success=success, error=error)
-
-
-@router.get("/admin/reranker-models")
-def list_reranker_models(
-    session: SessionDep,
-    user: CurrentSuperuserDep,
-    params: Params = Depends(),
-) -> Page[AdminRerankerModel]:
-    return reranker_model_repo.paginate(session, params)
+    return RerankerModelTestResult(success=success, error=error)
 
 
 @router.post("/admin/reranker-models")
 def create_reranker_model(
+    db_session: SessionDep,
+    user: CurrentSuperuserDep,
     reranker_model: RerankerModel,
-    session: SessionDep,
-    user: CurrentSuperuserDep,
 ) -> AdminRerankerModel:
-    return reranker_model_repo.create(session, reranker_model)
+    return reranker_model_repo.create(db_session, reranker_model)
 
 
-@router.get("/admin/reranker-models/{reranker_model_id}")
-def get_reranker_model_detail(
-    reranker_model_id: int,
-    session: SessionDep,
+@router.get("/admin/reranker-models/{model_id}")
+def get_reranker_model(
+    db_session: SessionDep,
     user: CurrentSuperuserDep,
+    model_id: int,
 ) -> AdminRerankerModel:
-    try:
-        return reranker_model_repo.must_get(reranker_model_id)
-    except RerankerModelNotFound as e:
-        raise e
-    except Exception as e:
-        logger.error(e)
-        raise InternalServerError()
+    return reranker_model_repo.must_get(db_session, model_id)
 
 
-@router.delete("/admin/reranker-models/{reranker_model_id}")
+@router.put("/admin/reranker-models/{model_id}")
+def update_reranker_model(
+    db_session: SessionDep,
+    user: CurrentSuperuserDep,
+    model_id: int,
+    model_update: RerankerModelUpdate,
+) -> AdminRerankerModel:
+    reranker_model = reranker_model_repo.must_get(db_session, model_id)
+    return reranker_model_repo.update(db_session, reranker_model, model_update)
+
+
+@router.delete("/admin/reranker-models/{model_id}")
 def delete_reranker_model(
-    reranker_model_id: int,
-    session: SessionDep,
+    db_session: SessionDep,
     user: CurrentSuperuserDep,
-):
-    reranker_model = reranker_model_repo.must_get(RerankerModel, reranker_model_id)
+    model_id: int,
+) -> None:
+    reranker_model = reranker_model_repo.must_get(db_session, model_id)
+    reranker_model_repo.delete(db_session, reranker_model)
 
-    # FIXME: Should be replaced with a new reranker or prohibit users from operating,
-    #  If the current reranker is used by a Chat Engine or Knowledge Base.
 
-    session.exec(
-        update(ChatEngine)
-        .where(ChatEngine.reranker_id == reranker_model_id)
-        .values(reranker_id=None)
-    )
-
-    session.delete(reranker_model)
-    session.commit()
+@router.put("/admin/reranker-models/{model_id}/set_default")
+def set_default_reranker_model(
+    db_session: SessionDep, user: CurrentSuperuserDep, model_id: int
+) -> AdminRerankerModel:
+    reranker_model = reranker_model_repo.must_get(db_session, model_id)
+    return reranker_model_repo.set_default(db_session, reranker_model)

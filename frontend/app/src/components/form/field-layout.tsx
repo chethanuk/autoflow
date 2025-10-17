@@ -1,84 +1,165 @@
 import type { FormControlWidgetProps } from '@/components/form/control-widget';
+import type { CreateEntityFormBetaProps } from '@/components/form/create-entity-form';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, useFormContext } from '@/components/ui/form.beta';
+import { isChangeEvent } from '@/lib/react';
 import { cn } from '@/lib/utils';
+import { type DeepKeys, type DeepValue, type FieldApi, FieldValidators, type FormApi, useField } from '@tanstack/react-form';
 import { MinusIcon, PlusIcon } from 'lucide-react';
-import { cloneElement, type ReactElement, type ReactNode } from 'react';
-import { ControllerRenderProps, FieldPath, type FieldPathByValue, type FieldPathValue, FieldValues } from 'react-hook-form';
+import { cloneElement, type ComponentProps, type ComponentType, type ReactElement, type ReactNode } from 'react';
+import { z } from 'zod';
+
+/**
+ * This function creates typed form layout components.
+ *
+ * - If T is ZodType, TFormData is the input
+ * - If T is {@link CreateEntityFormBetaProps} or return type of {@link import('@/components/form/create-entity-form').withCreateEntityForm}, TFormData is the form input type
+ * - If T is Record<string, any>, TFormData is itself
+ */
+export function formFieldLayout<T> (): TypedFormFieldLayouts<
+  T extends z.ZodType<any, any, any>
+    ? z.input<T>
+    : T extends CreateEntityFormBetaProps<any, infer I>
+      ? I
+      : T extends ComponentType<CreateEntityFormBetaProps<any, infer I>>
+        ? I
+        : T extends Record<string, any>
+          ? T
+          : never
+> {
+  return {
+    Basic: FormFieldBasicLayout,
+    Contained: FormFieldContainedLayout,
+    Inline: FormFieldInlineLayout,
+    PrimitiveArray: FormPrimitiveArrayFieldBasicLayout,
+  } satisfies TypedFormFieldLayouts<unknown> as never;
+}
+
+export interface TypedFormFieldLayouts<TFormData> {
+  Basic: <TName extends DeepKeys<TFormData>> (props: ComponentProps<typeof FormFieldBasicLayout<TFormData, TName>>) => ReactNode,
+  Contained: <TName extends DeepKeys<TFormData>> (props: ComponentProps<typeof FormFieldContainedLayout<TFormData, TName>>) => ReactNode,
+  Inline: <TName extends DeepKeys<TFormData>> (props: ComponentProps<typeof FormFieldInlineLayout<TFormData, TName>>) => ReactNode,
+  PrimitiveArray: <TName extends DeepKeysOfType<TFormData, any[]>> (props: ComponentProps<typeof FormPrimitiveArrayFieldBasicLayout<TFormData, TName>>) => ReactNode,
+}
+
+type WidgetProps<TFormData, TName extends DeepKeys<TFormData>> = Required<Omit<FormControlWidgetProps<DeepValue<TFormData, TName>>, 'id' | 'aria-invalid' | 'aria-describedby'>>
 
 export interface FormFieldLayoutProps<
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+  TFormData,
+  TName extends DeepKeys<TFormData> = DeepKeys<TFormData>
 > {
   name: TName;
   label: ReactNode;
   required?: boolean;
   description?: ReactNode;
-  // value = props.value ?? fallbackValue
-  fallbackValue?: FieldPathValue<TFieldValues, TName>;
-  children: ((props: ControllerRenderProps<TFieldValues, TName>) => ReactNode) | ReactElement<FormControlWidgetProps<TFieldValues, TName>>;
+  /**
+   * Fallback value is used for display. This value will not submit to server.
+   */
+  fallbackValue?: DeepValue<TFormData, TName>;
+  defaultValue?: NoInfer<DeepValue<TFormData, TName>>;
+  validators?: FieldValidators<TFormData, TName>;
+
+  children: ((props: WidgetProps<TFormData, TName>) => ReactNode) | ReactElement<WidgetProps<TFormData, TName>>;
 }
 
 function renderWidget<
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
-> (children: FormFieldLayoutProps<TFieldValues, TName>['children'], { value, ...props }: ControllerRenderProps<TFieldValues, TName>, fallbackValue?: FieldPathValue<TFieldValues, TName>) {
+  TFormData,
+  TName extends DeepKeys<TFormData> = DeepKeys<TFormData>
+> (
+  children: FormFieldLayoutProps<TFormData, TName>['children'],
+  field: FieldApi<TFormData, TName>,
+  form: FormApi<TFormData>,
+  disabled: boolean | undefined,
+  fallbackValue?: DeepValue<TFormData, TName>,
+) {
+
+  const data: WidgetProps<TFormData, TName> = {
+    value: field.state.value ?? fallbackValue as any,
+    name: field.name,
+    onChange: ((ev: any) => {
+      if (isChangeEvent(ev)) {
+        const el = ev.currentTarget;
+        if (el instanceof HTMLInputElement) {
+          if (el.type === 'number') {
+            field.handleChange(el.valueAsNumber as any);
+            return;
+          } else if (el.type === 'date' || el.type === 'datetime-local') {
+            field.handleChange(el.valueAsDate as any);
+            return;
+          }
+        }
+        field.handleChange((el as HTMLInputElement).value as any);
+      } else {
+        field.handleChange(ev);
+      }
+    }),
+    onBlur: field.handleBlur,
+    disabled: disabled || field.form.state.isSubmitting,
+    ref: () => {},
+  };
+
   if (typeof children === 'function') {
-    return children({ value: value ?? fallbackValue as never, ...props });
+    return children(data);
   } else {
-    return cloneElement(children, { value: value ?? fallbackValue as never, ...props });
+    return cloneElement(children, data);
   }
 }
 
 export function FormFieldBasicLayout<
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+  TFormData,
+  TName extends DeepKeys<TFormData> = DeepKeys<TFormData>
 > ({
   name,
   label,
   description,
   required,
   fallbackValue,
+  defaultValue,
+  validators,
   children,
-}: FormFieldLayoutProps<TFieldValues, TName>) {
+}: FormFieldLayoutProps<TFormData, TName>) {
   return (
-    <FormField<TFieldValues, TName>
+    <FormField<TFormData, TName>
       name={name}
-      render={({ field }) => (
+      defaultValue={defaultValue}
+      render={(field, form, disabled) => (
         <FormItem>
           <FormLabel>
             {label}
-            {required && <sup className="text-destructive">*</sup>}
+            {required && <sup className="text-destructive" aria-hidden>*</sup>}
           </FormLabel>
           <FormControl>
-            {renderWidget(children, field, fallbackValue)}
+            {renderWidget<TFormData, TName>(children, field, form, disabled, fallbackValue)}
           </FormControl>
           {description && <FormDescription className="break-words">{description}</FormDescription>}
           <FormMessage />
         </FormItem>
       )}
+      validators={validators}
     />
   );
 }
 
 export function FormFieldInlineLayout<
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+  TFormData,
+  TName extends DeepKeys<TFormData> = DeepKeys<TFormData>
 > ({
   name,
   label,
   description,
+  defaultValue,
+  validators,
   children,
-}: FormFieldLayoutProps<TFieldValues, TName>) {
+}: FormFieldLayoutProps<TFormData, TName>) {
   return (
-    <FormField<TFieldValues, TName>
+    <FormField<TFormData, TName>
       name={name}
-      render={({ field }) => (
+      defaultValue={defaultValue}
+      render={(field, form, disabled) => (
         <FormItem>
           <div className="flex items-center gap-2">
             <FormControl>
-              {renderWidget(children, field)}
+              {renderWidget<TFormData, TName>(children, field, form, disabled)}
             </FormControl>
             <FormLabel>{label}</FormLabel>
           </div>
@@ -86,38 +167,43 @@ export function FormFieldInlineLayout<
           <FormMessage />
         </FormItem>
       )}
+      validators={validators}
     />
   );
 }
 
 export function FormFieldContainedLayout<
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+  TFormData,
+  TName extends DeepKeys<TFormData> = DeepKeys<TFormData>
 > ({
   name,
   label,
   description,
   required,
   fallbackValue,
+  defaultValue,
+  validators,
   children,
   unimportant = false,
-}: FormFieldLayoutProps<TFieldValues, TName> & { unimportant?: boolean }) {
+}: FormFieldLayoutProps<TFormData, TName> & { unimportant?: boolean }) {
   return (
-    <FormField<TFieldValues, TName>
+    <FormField<TFormData, TName>
       name={name}
-      render={({ field }) => (
+      defaultValue={defaultValue}
+      validators={validators}
+      render={(field, form, disabled) => (
         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
           <div className="space-y-0.5">
             <FormLabel className={cn(!unimportant && 'text-base')}>
               {label}
-              {required && <sup className="text-destructive">*</sup>}
+              {required && <sup className="text-destructive" aria-hidden>*</sup>}
             </FormLabel>
             {description && <FormDescription>
               {description}
             </FormDescription>}
           </div>
           <FormControl>
-            {renderWidget(children, field, fallbackValue)}
+            {renderWidget<TFormData, TName>(children, field, form, disabled, fallbackValue)}
           </FormControl>
         </FormItem>
       )}
@@ -125,56 +211,71 @@ export function FormFieldContainedLayout<
   );
 }
 
+export type DeepKeysOfType<T, Value> = string & keyof { [P in DeepKeys<T> as DeepValue<T, P> extends Value ? P : never]: any }
+
 export function FormPrimitiveArrayFieldBasicLayout<
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPathByValue<TFieldValues, any[]> = FieldPathByValue<TFieldValues, any[]>
+  TFormData,
+  TName extends DeepKeysOfType<TFormData, any[]> = DeepKeysOfType<TFormData, any[]>
 > ({
   name,
   label,
   description,
   children,
+  required,
   defaultValue,
-}: FormFieldLayoutProps<TFieldValues, TName> & { defaultValue: () => FieldPathValue<TFieldValues, TName>[0] }) {
+  validators,
+  newItemValue,
+}: FormFieldLayoutProps<TFormData, TName> & { newItemValue: () => any }) {
+  const { form } = useFormContext<TFormData>();
+  const arrayField = useField<TFormData, TName>({
+    name,
+    form,
+    mode: 'array',
+  });
+
+  const arrayFieldValue: any[] = arrayField.state.value as never;
+
   return (
-    <FormField<TFieldValues, TName>
+    <FormField
       name={name}
-      render={({ field: arrayField }) => (
+      defaultValue={defaultValue}
+      validators={validators}
+      render={() => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel>
+            {label}
+            {required && <sup className="text-destructive" aria-hidden>*</sup>}
+          </FormLabel>
           <ol className="space-y-2">
-            {(arrayField.value as any[] ?? []).map((_, index) => (
+            {arrayFieldValue.map((_, index) => (
               <FormField
                 key={index}
-                name={`${name}.${index}`}
-                render={({ field }) => (
+                name={`${name}[${index}]`}
+                render={(field, form, disabled) => (
                   <li>
                     <FormItem>
                       <div className="flex gap-2">
                         <FormControl className="flex-1">
-                          {renderWidget(children, field as any)}
+                          {renderWidget<any, any>(children, field as any, form as any, disabled)}
                         </FormControl>
                         <Button
-                          disabled={field.disabled}
+                          disabled={disabled}
                           size="icon"
                           variant="secondary"
                           type="button"
                           onClick={() => {
-                            const newArray = [...arrayField.value];
-                            newArray.splice(index, 0, defaultValue());
-                            arrayField.onChange(newArray);
+                            void arrayField.insertValue(index, newItemValue());
                           }}
                         >
                           <PlusIcon className="size-4" />
                         </Button>
                         <Button
-                          disabled={field.disabled}
+                          disabled={disabled}
                           size="icon"
                           variant="ghost"
                           type="button"
                           onClick={() => {
-                            const newArray = [...arrayField.value];
-                            newArray.splice(index, 1);
-                            arrayField.onChange(newArray);
+                            void arrayField.removeValue(index);
                           }}
                         >
                           <MinusIcon className="size-4" />
@@ -192,7 +293,7 @@ export function FormPrimitiveArrayFieldBasicLayout<
             variant="outline"
             type="button"
             onClick={() => {
-              arrayField.onChange([...arrayField.value, defaultValue()]);
+              void arrayField.pushValue(newItemValue());
             }}
           >
             <PlusIcon className="w-4 mr-1" />
@@ -201,41 +302,6 @@ export function FormPrimitiveArrayFieldBasicLayout<
           {description && <FormDescription className="break-words">{description}</FormDescription>}
           <FormMessage />
         </FormItem>
-      )}
-    />
-  );
-}
-
-export function FormCollapsedBasicLayout<
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
-> ({
-  name,
-  label,
-  description,
-  children,
-  fallbackValue,
-}: FormFieldLayoutProps<TFieldValues, TName>) {
-  return (
-    <FormField<TFieldValues, TName>
-      name={name}
-      render={({ field }) => (
-        <Collapsible>
-          <FormItem>
-            <CollapsibleTrigger className="flex gap-2 items-center group cursor-pointer">
-              <PlusIcon className="opacity-50 group-hover:opacity-100 transition-opacity size-4 hidden group-data-[state=closed]:block" />
-              <MinusIcon className="opacity-50 group-hover:opacity-100 transition-opacity size-4 hidden group-data-[state=open]:block" />
-              <FormLabel className="cursor-pointer">{label}</FormLabel>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <FormControl>
-                {renderWidget(children, field, fallbackValue)}
-              </FormControl>
-            </CollapsibleContent>
-            {description && <FormDescription className="break-words">{description}</FormDescription>}
-            <FormMessage />
-          </FormItem>
-        </Collapsible>
       )}
     />
   );

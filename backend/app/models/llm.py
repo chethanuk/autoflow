@@ -1,9 +1,8 @@
 from typing import Optional, Any
-
 from sqlmodel import Field, Column, JSON, String
-
+from pydantic import BaseModel
+from app.rag.llms.provider import LLMProvider
 from .base import UpdatableBaseModel, AESEncryptedColumn
-from app.types import LLMProvider
 
 
 class BaseLLM(UpdatableBaseModel):
@@ -23,3 +22,9 @@ class LLM(BaseLLM, table=True):
 
 class AdminLLM(BaseLLM):
     id: int
+
+
+class LLMUpdate(BaseModel):
+    name: Optional[str] = None
+    config: Optional[dict] = None
+    credentials: Optional[str | dict] = None

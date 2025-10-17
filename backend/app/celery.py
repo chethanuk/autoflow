@@ -12,6 +12,11 @@ app = Celery(
 app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    task_routes=[
+        {"app.tasks.evaluate.*": {"queue": "evaluation"}},
+        {"*": {"queue": "default"}},
+    ],
+    broker_connection_retry_on_startup=True,
 )
 
 app.autodiscover_tasks(["app"])

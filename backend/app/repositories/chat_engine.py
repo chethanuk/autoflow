@@ -1,11 +1,14 @@
 from typing import Optional
 from datetime import datetime, UTC
+
+from sqlalchemy import func
 from sqlmodel import select, Session, update
+from app.exceptions import ChatEngineNotFound
 from fastapi_pagination import Params, Page
 from fastapi_pagination.ext.sqlmodel import paginate
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.models import ChatEngine, ChatEngineUpdate
+from app.models.chat_engine import ChatEngine, ChatEngineUpdate
 from app.repositories.base_repo import BaseRepo
 
 
@@ -16,6 +19,12 @@ class ChatEngineRepo(BaseRepo):
         return session.exec(
             select(ChatEngine).where(ChatEngine.id == id, ChatEngine.deleted_at == None)
         ).first()
+
+    def must_get(self, session: Session, id: int) -> ChatEngine:
+        chat_engine = self.get(session, id)
+        if chat_engine is None:
+            raise ChatEngineNotFound(id)
+        return chat_engine
 
     def paginate(
         self,
@@ -33,6 +42,16 @@ class ChatEngineRepo(BaseRepo):
                 ChatEngine.is_default == True, ChatEngine.deleted_at == None
             )
         ).first()
+
+    def has_default(self, session: Session) -> bool:
+        return (
+            session.scalar(
+                select(func.count(ChatEngine.id)).where(
+                    ChatEngine.is_default == True, ChatEngine.deleted_at == None
+                )
+            )
+            > 0
+        )
 
     def get_engine_by_name(self, session: Session, name: str) -> Optional[ChatEngine]:
         return session.exec(
@@ -57,10 +76,10 @@ class ChatEngineRepo(BaseRepo):
         self,
         session: Session,
         chat_engine: ChatEngine,
-        chat_engine_in: ChatEngineUpdate,
+        chat_engine_update: ChatEngineUpdate,
     ) -> ChatEngine:
-        set_default = chat_engine_in.is_default
-        for field, value in chat_engine_in.model_dump(exclude_unset=True).items():
+        set_default = chat_engine_update.is_default
+        for field, value in chat_engine_update.model_dump(exclude_unset=True).items():
             setattr(chat_engine, field, value)
             flag_modified(chat_engine, field)
 

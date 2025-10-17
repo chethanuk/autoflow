@@ -3,23 +3,42 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.admin_routes.knowledge_base.graph.models import SynopsisEntityCreate, EntityUpdate, RelationshipUpdate, \
-    GraphSearchRequest
+from app.api.admin_routes.knowledge_base.graph.models import (
+    SynopsisEntityCreate,
+    EntityUpdate,
+    RelationshipUpdate,
+    KBRetrieveKnowledgeGraphRequest,
+    GraphSearchRequest,
+)
 from app.api.deps import SessionDep
 from app.exceptions import KBNotFound, InternalServerError
 from app.models import (
     EntityPublic,
     RelationshipPublic,
 )
-from app.rag.knowledge_base.index_store import get_kb_tidb_graph_editor, get_kb_tidb_graph_store
+from app.rag.retrievers.knowledge_graph.schema import (
+    KnowledgeGraphRetrievalResult,
+)
+from app.rag.knowledge_base.index_store import (
+    get_kb_tidb_graph_editor,
+    get_kb_tidb_graph_store,
+)
+from app.rag.retrievers.knowledge_graph.simple_retriever import (
+    KnowledgeGraphSimpleRetriever,
+)
 from app.repositories import knowledge_base_repo
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/admin/knowledge_bases/{kb_id}/graph/entities/search", response_model=List[EntityPublic])
-def search_similar_entities(session: SessionDep, kb_id: int, query: str, top_k: int = 10):
+@router.get(
+    "/admin/knowledge_bases/{kb_id}/graph/entities/search",
+    response_model=List[EntityPublic],
+)
+def search_similar_entities(
+    session: SessionDep, kb_id: int, query: str, top_k: int = 10
+):
     try:
         kb = knowledge_base_repo.must_get(session, kb_id)
         tidb_graph_editor = get_kb_tidb_graph_editor(session, kb)
@@ -31,8 +50,13 @@ def search_similar_entities(session: SessionDep, kb_id: int, query: str, top_k: 
         raise e
 
 
-@router.post("/admin/knowledge_bases/{kb_id}/graph/entities/synopsis", response_model=EntityPublic)
-def create_synopsis_entity(session: SessionDep, kb_id: int, request: SynopsisEntityCreate):
+@router.post(
+    "/admin/knowledge_bases/{kb_id}/graph/entities/synopsis",
+    response_model=EntityPublic,
+)
+def create_synopsis_entity(
+    session: SessionDep, kb_id: int, request: SynopsisEntityCreate
+):
     try:
         kb = knowledge_base_repo.must_get(session, kb_id)
         tidb_graph_editor = get_kb_tidb_graph_editor(session, kb)
@@ -50,7 +74,11 @@ def create_synopsis_entity(session: SessionDep, kb_id: int, request: SynopsisEnt
         # TODO: throw InternalServerError
         raise e
 
-@router.get("/admin/knowledge_bases/{kb_id}/graph/entities/{entity_id}", response_model=EntityPublic)
+
+@router.get(
+    "/admin/knowledge_bases/{kb_id}/graph/entities/{entity_id}",
+    response_model=EntityPublic,
+)
 def get_entity(session: SessionDep, kb_id: int, entity_id: int):
     try:
         kb = knowledge_base_repo.must_get(session, kb_id)
@@ -69,8 +97,13 @@ def get_entity(session: SessionDep, kb_id: int, entity_id: int):
         raise e
 
 
-@router.put("/admin/knowledge_bases/{kb_id}/graph/entities/{entity_id}", response_model=EntityPublic)
-def update_entity(session: SessionDep, kb_id: int, entity_id: int, entity_update: EntityUpdate):
+@router.put(
+    "/admin/knowledge_bases/{kb_id}/graph/entities/{entity_id}",
+    response_model=EntityPublic,
+)
+def update_entity(
+    session: SessionDep, kb_id: int, entity_id: int, entity_update: EntityUpdate
+):
     try:
         kb = knowledge_base_repo.must_get(session, kb_id)
         tidb_graph_editor = get_kb_tidb_graph_editor(session, kb)
@@ -80,7 +113,9 @@ def update_entity(session: SessionDep, kb_id: int, entity_id: int, entity_update
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Entity not found",
             )
-        entity = tidb_graph_editor.update_entity(session, old_entity, entity_update.model_dump())
+        entity = tidb_graph_editor.update_entity(
+            session, old_entity, entity_update.model_dump()
+        )
         return entity
     except KBNotFound as e:
         raise e
@@ -123,7 +158,7 @@ def get_relationship(session: SessionDep, kb_id: int, relationship_id: int):
         relationship = tidb_graph_editor.get_relationship(session, relationship_id)
         if relationship is None:
             raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="Relationship not found",
             )
         return relationship
@@ -136,13 +171,13 @@ def get_relationship(session: SessionDep, kb_id: int, relationship_id: int):
 
 @router.put(
     "/admin/knowledge_bases/{kb_id}/graph/relationships/{relationship_id}",
-    response_model=RelationshipPublic
+    response_model=RelationshipPublic,
 )
 def update_relationship(
     session: SessionDep,
     kb_id: int,
     relationship_id: int,
-    relationship_update: RelationshipUpdate
+    relationship_update: RelationshipUpdate,
 ):
     try:
         kb = knowledge_base_repo.must_get(session, kb_id)
@@ -164,23 +199,44 @@ def update_relationship(
         raise e
 
 
-@router.post("/admin/knowledge_bases/{kb_id}/graph/search")
-def search_graph(session: SessionDep, kb_id: int, request: GraphSearchRequest):
+@router.post("/admin/knowledge_bases/{kb_id}/graph/retrieve")
+def retrieve_kb_knowledge_graph(
+    db_session: SessionDep, kb_id: int, request: KBRetrieveKnowledgeGraphRequest
+) -> KnowledgeGraphRetrievalResult:
+    try:
+        retriever = KnowledgeGraphSimpleRetriever(
+            db_session=db_session,
+            knowledge_base_id=kb_id,
+            config=request.retrieval_config.knowledge_graph,
+        )
+        knowledge_graph = retriever.retrieve_knowledge_graph(request.query)
+        return KnowledgeGraphRetrievalResult(
+            entities=knowledge_graph.entities,
+            relationships=knowledge_graph.relationships,
+        )
+    except KBNotFound as e:
+        raise e
+    except Exception as e:
+        # TODO: throw InternalServerError
+        raise e
+
+
+@router.post("/admin/knowledge_bases/{kb_id}/graph/search", deprecated=True)
+def legacy_search_graph(session: SessionDep, kb_id: int, request: GraphSearchRequest):
     try:
         kb = knowledge_base_repo.must_get(session, kb_id)
         graph_store = get_kb_tidb_graph_store(session, kb)
-        entities, relations, _ = graph_store.retrieve_with_weight(
+        entities, relationships = graph_store.retrieve_with_weight(
             request.query,
             [],
             request.depth,
             request.include_meta,
             request.with_degree,
-            False,
-            {},
+            request.relationship_meta_filters,
         )
         return {
             "entities": entities,
-            "relationships": relations,
+            "relationships": relationships,
         }
     except KBNotFound as e:
         raise e
